@@ -8,7 +8,8 @@ import pylab as pl
 pl.ion()
 c0 = 299792458
 DISPLAY = 1
-datafolder = "/home/martineau/GRAND/GRANDproto35/data/ulastai"
+#datafolder = "/home/martineau/GRAND/GRANDproto35/data/ulastai"
+datafolder = "/mnt/disk"
 
     
 def twos_comp(val, bits):
