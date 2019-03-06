@@ -1,5 +1,6 @@
+import os
 import sys
-sys.path.append("../pyef/")
+sys.path.append("../")
 import pyef
 
 import numpy as np
@@ -8,8 +9,8 @@ import pylab as pl
 pl.ion()
 c0 = 299792458
 DISPLAY = 1
-#datafolder = "/home/martineau/GRAND/GRANDproto35/data/ulastai"
-datafolder = "/mnt/disk"
+datafolder = "/home/martineau/GRAND/GRANDproto35/data/ulastai"
+#datafolder = "/mnt/disk"
 
     
 def twos_comp(val, bits):
@@ -17,8 +18,6 @@ def twos_comp(val, bits):
     if (val & (1 << (bits - 1))) != 0: # if sign bit is set e.g., 8bit: 128-255
         val = val - (1 << bits)        # compute negative value
     return val   
-    
-
 
 def build_distmat():
   # Build matrix of d(ant1,ant2)
@@ -45,6 +44,7 @@ def build_coincs(trigtable,uid,d):
   # Search for coincs
   ntrigs = np.shape(trigtable)[1]
   tmax = np.max(d)/c0*1e9*10
+  print("Max possible delay (ns):",tmax)
   ants = trigtable[0,:]
   times = trigtable[1,:]
   i = 0
@@ -72,7 +72,7 @@ def display_events(nrun=None,pyf=None,tid=None):
     print("No pyef object, loading it from run number.")
     if nrun == None:
       print("get_time error! Pass run number or pyef object as argument")
-      return
+      return  
     pyf = load_data(nrun)
   
   nevts = len(pyf.event_list)
@@ -124,6 +124,7 @@ def get_time(nrun=None,pyf=None):
   #print(nevts,"events in file",datafile)
   # TBD: access file header
 
+  secs = []
   nsecs = []
   ttimes = []
   IDs = []
@@ -135,38 +136,74 @@ def get_time(nrun=None,pyf=None):
       #ls.display()
       #print("LS ID=")
       #print(ls.header.ls_id)
-      IDs.append(ls.header.ls_id) # 16 lowest bits of IP adress
+      IDs.append(ls.header.ls_id-356) # 16 lowest bits of IP adress --256 to go down to 8 lowest digits of IP adress & -100 to go down to antenna ID
     h = evt.header
     sec=h.event_sec
-    if ls.header.ls_id==367:
+    if ls.header.ls_id==11:
       sec=sec+1  # Dirty fix R87!!! To be solved
-    if ls.header.ls_id==387:
+    if ls.header.ls_id==31:
       sec=sec+16  # Dirty fix R91!!! To be solved
     nsec=h.event_nsec
     nsecs.append(nsec)
     ttime = sec*1e9+nsec
     ttimes.append(ttime)
-    print("ID=",ls.header.ls_id,",Time=",sec,nsec)
+    secs.append(sec)
+    print("ID=",ls.header.ls_id-356,",Time=",sec,nsec)
     #evt.display()
     #h.display()
     
+  secs = np.array(secs)
   nsecs = np.array(nsecs)
   ttimes = np.array(ttimes)
   ttimesns = ttimes-ttimes[0]
   ttimes = ttimes/1e9
   dur = max(ttimes)-min(ttimes)
   IDs = np.array(IDs)
-  IDs = IDs-356  # --256 to go down to 8 lowest digits of IP adress & -100 to go down to antenna ID
   units = np.unique(IDs)
   res = np.vstack((IDs,ttimesns))
   res = np.sort(res)
-  
+  for uid in units:
+      tdif = np.diff(ttimes[IDs==uid])
+      aid = np.argwhere(tdif<0)
+      for i in aid:
+        #print(ind)
+        #i = ind[1]
+        #print(i,j,aid[j],xx)
+        print("*** Error for unit",uid,":\nevent",i,": SSS =",secs[IDs==uid][i],"\nevent",i+1,": SSS =",secs[IDs==uid][i+1])
+	
   if DISPLAY:
-    #pl.figure(1)
-    #pl.subplot(211)
-    #pl.plot(nsecs)
-    #pl.subplot(212)
-    #pl.hist(nsecs,100)
+    # Build delta_ns info
+    for uid in units:
+      deltat = []
+      thisID = np.argwhere(IDs==uid)
+      otherID = np.argwhere(IDs!=uid)
+      for i in thisID:
+        i = i[0]
+        tg = min(abs(otherID-i))[0]  # Closest index of other units
+        tg = tg+i
+        print("****",i,tg)
+        print(otherID[max(0,tg-10):tg+10])
+        otherNS = nsecs[otherID[max(0,tg-10):tg+10]]
+        print(otherNS)
+        if len(otherNS)>0:
+          dt = min(abs(otherNS-nsecs[i]))
+          deltat.append(dt)
+      
+      pl.figure(12)
+      pl.hist(deltat)
+      pl.show()
+      	
+    pl.figure(1)
+    pl.subplot(211)
+    for uid in units:
+      pl.plot(nsecs[IDs==uid],label=uid)
+    pl.xlabel('Trigger nb')
+    pl.ylabel('Nanosec counter value')
+    pl.legend(loc='best')
+    pl.subplot(212)
+    pl.hist(nsecs,100)
+    pl.xlabel('Nanosec counter value')
+    pl.xlim([0,1e9])
     pl.figure(2)
     for uid in units:
       pl.plot(ttimes[IDs==uid],label=uid)
@@ -192,6 +229,10 @@ def get_time(nrun=None,pyf=None):
 def load_data(nrun):
 # Loads pyef object
   datafile = datafolder+"/R"+nrun+".data.bin"
+  if os.path.isfile(datafile) is False:
+     print('File ',datafile,'does not exist. Aborting.')
+     return
+
   print("Loading",datafile,"...")
   pyf = pyef.read_file(datafile)  #TBD: add error message if fails.
   print("Done.")
@@ -203,8 +244,12 @@ if __name__ == '__main__':
        print("Usage: >readData RUNID")
      else: 
        f = load_data(sys.argv[1])
-       display_events(pyf = f,tid=9)
+       if f == None:
+         sys.exit()
+       #display_events(pyf = f,tid=9)
        uid,distmat = build_distmat()
+       #print(uid,distmat)
+       #input()
        trigtable = get_time(pyf=f)  # 2-lines matrix with [0,:]=UnitIDs and [1,:]=trigtimes
        build_coincs(trigtable,uid,distmat)
      #pl.figure(1)

@@ -145,8 +145,8 @@ def displaySLC(boardID):
    # Time ticks
    nticks = 8
    ind = np.linspace(min(utc),max(utc),nticks)
-   date = [datetime.datetime.fromtimestamp(ux).strftime('%H:%M') for ux in ind]
-   #date = [datetime.datetime.fromtimestamp(ux).strftime('%m/%d') for ux in ind]
+   #date = [datetime.datetime.fromtimestamp(ux).strftime('%H:%M') for ux in ind]
+   date = [datetime.datetime.fromtimestamp(ux).strftime('%m/%d') for ux in ind]
    
    # Temperature plot
    pl.figure(1)
