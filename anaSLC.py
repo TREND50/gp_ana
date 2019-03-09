@@ -25,8 +25,8 @@ def loopSLCRuns(boardID,startrun,endrun):
     loopSLCEvents(boardID,run)
     
 def loopSLCEvents(boardID,RUNID):
-   #datadir = "/home/pastsoft/data/"
-   datadir = "/home/martineau/GRAND/GRANDproto35/data/ulastai/"
+   #datadir = "/home/martineau/GRAND/GRANDproto35/data/ulastai/"
+   datadir = "/mnt/disk/"
    filename = datadir+"S"+str(RUNID)+".yaml"   # To be modified
    if os.path.isfile(filename) is False:
      print('File ',filename,'does not exist. Aborting.')
