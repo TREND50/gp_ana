@@ -30,6 +30,7 @@ def loadMaxCoarse(runid):
   slcfile = datafolder+"/S"+runid+".yaml"
   if os.path.isfile(slcfile) is False:
      print('File ',slcfile,'does not exist. Aborting.')
+     IDsin = []
      return
   
   # Now read SLC file ad dump infos in arrays
@@ -71,12 +72,15 @@ def getMaxCoarse(uid,utcsec):
   
   # Now retrieve proper maxCoarse info
   i = np.nonzero(IDsin == uid)[0]  
-  i = i[0]
-  indt = np.argmin(np.abs(utcSLC[i]-utcsec))
-  #print(utcsec,utcSLC[i][indt],maxCoarse[i][indt])
+  if len(i)>0:  # Unit found in SLC data
+    i = i[0]
+    indt = np.argmin(np.abs(utcSLC[i]-utcsec))
+    #print(utcsec,utcSLC[i][indt],maxCoarse[i][indt])
+  else:  # Unit not found in LSC data
+    return 0
+    
   return maxCoarse[i][indt]
 
-  #print(utcSLC,maxCoarse)
   
 def build_distmat():
   # Build matrix of d(ant1,ant2)
@@ -88,7 +92,7 @@ def build_distmat():
   x=pos[:,2]
   y=pos[:,1]
   z=pos[:,3]
-  #p = [x, y ,z]  # Why cannot numpy build matrixes with this syntax?????????? Makes me crazy
+  #p = [x, y, z]  # Why cannot numpy build matrixes with this syntax?????????? Makes me crazy
   p = np.vstack((x,y,z))
   d = np.ndarray(shape=(nants,nants))  
   for i in range(nants):
@@ -99,46 +103,62 @@ def build_distmat():
   
   return uid,d
 
+
 def build_coincs(trigtable,uid,d):
   # Search for coincs
   ntrigs = np.shape(trigtable)[0]
   tmax = np.max(d)/c0*1e9*1.5
   uid = trigtable[:,0]  # Vector of unit UDs
-  times = trigtable[:,1]  # Vector of ttrig times (units = ns; ref = 1st trigger)
-  i = 0
+  secs = trigtable[:,1]  # Vector of ttrig times (units = ns; ref = 1st trigger)
+  nsecs = trigtable[:,2]
+  secs = secs-min(secs)  # Watch out!!! If not substracted, "times" field is too long...
+  times = secs*1e9+nsecs
+  
   #
+  i = 0
   delays = []
+  uid_delays = np.array(delays)
   uids = []
   while i<ntrigs:   # Loop on all triggers in table
     trig_ref = times[i]
     id_ref = uid[i]
     tsearch = times[i:-1]-trig_ref
+    #tsearchini = times[i:-1]-trig_ref
     tsearch = tsearch[np.argwhere(tsearch<tmax)].T[0]  #  causal timewindow. Transpose needed to get a line vector and avoid []
     idsearch = uid[i:i+len(tsearch)]
-    #print("Units in causal timewindow:",idsearch,tsearch,times[i:i+len(tsearch)])
-    others = np.argwhere(idsearch!=id_ref).T[0]  # Remove triggers from target antenna
-    #print("From different units:",idsearch[others],tsearch[others],others)
-    #print(tsearch,len(tsearch),np.size(tsearch),np.shape(tsearch))
-    if len(tsearch)>1 and sum(tsearch)>0: 
+    #othersr = np.argwhere(idsearch!=id_ref).T[0]  # Remove triggers from target antenna
+    _, coinc_ind = np.unique(idsearch, return_index = True) # remove multiple triggers from a same antenna # Warning!!!
+    if len(coinc_ind)>1: 
       # there are events in the causal timewindow
-      print("*** Reference unit:",id_ref,trig_ref,", now looking for coincs within",tmax,"ns")
-      print("Possible coinc with units",idsearch[others],tsearch[others],others)
-      uids.append(idsearch[others][0])
-      delays.append(tsearch[others][0])
-      i = i+others[-1]+1
+      print(i,"*** Reference unit:",id_ref,times[i],", now looking for coincs within",tmax,"ns")
+      #print(np.argwhere(tsearchini<tmax),tsearchini[0:10])
+      #print("Units in causal timewindow:",i,i+len(tsearch),idsearch,tsearch,secs[i:i+len(tsearch)],nsecs[i:i+len(tsearch)])
+      #print("From different units:",idsearch[others],tsearch[others],others)
+      print("Possible coinc between units",idsearch[coinc_ind],tsearch[coinc_ind],coinc_ind)
+      
+      uids.append(idsearch[coinc_ind])
+      coinc_times = tsearch[coinc_ind]
+      coinc_ids = idsearch[coinc_ind]
+      
+      # Now load delay info (only for histos)
+      delays = np.concatenate((delays,coinc_times[coinc_ids!=id_ref]))
+      uid_delays = np.concatenate((uid_delays,idsearch[coinc_ids!=id_ref]))
+      
+      i = i+coinc_ind[-1]+1
     else:
       i = i+1
       
-    #print(times[i])
-    #print(trig_search)
-  uids = np.array(uids)
+  uid_delays = np.array(uid_delays)
+  uid = np.unique(uid_delays)
   delays = np.array(delays)
-  pl.figure(1)
-  pl.hist(delays[uids==5],100)
-  pl.hist(delays[uids==9],100)
-  pl.hist(delays[uids==18],100)
+  pl.figure(8)
+  for i in uid:
+    pl.hist(delays[uid_delays==i],1000,label='ID{0}'.format(int(i)))
+  pl.legend(loc='best')
+  pl.xlabel('Trigger delay (ns)')
   pl.show()
                     
+		    
 def get_time(nrun=None,pyf=None):
 # Retrieves time info from datafile
   
@@ -158,6 +178,7 @@ def get_time(nrun=None,pyf=None):
   nsecs = []
   ttimes = []
   IDs = []
+  i = 0
   for evt in f.event_list:
   # Loop on all events
     #print("\n\n!!!New event!!!")
@@ -169,15 +190,23 @@ def get_time(nrun=None,pyf=None):
       #print(ls.header.ls_id)
       uid = int(ls.header.ls_id-356) # 16 lowest bits of IP adress --256 to go down to 8 lowest digits of IP adress & -100 to go down to antenna ID
       IDs.append(uid) 
-      nsec = ls.header.gps_nanoseconds  # What is that one for???
+      #nsec = ls.header.gps_nanoseconds  # What is that one for???
       
     h = evt.header
     sec = h.event_sec
     if 0:
+      if uid == 6:
+          sec = sec-1
       if uid == 9:
-        sec = sec-3  # Dirty fix R167!!! To be solved
+          sec = sec-1
       if uid == 18:
-        sec = sec-5  # Dirty fix R167!!! To be solved
+          sec = sec-1
+      if uid == 31:
+          sec = sec-1	        
+#      if uid == 9:
+#        sec = sec-3  # Dirty fix R167!!! To be solved
+#      if uid == 18:
+#        sec = sec-5  # Dirty fix R167!!! To be solved
     nsec = h.event_nsec
     # Now correct time from maxCoarse value
     maxcoarse = getMaxCoarse(uid,sec)
@@ -186,27 +215,28 @@ def get_time(nrun=None,pyf=None):
       cor = 1
     nsec = nsec*cor
     nsecs.append(nsec)
-    ttime = sec*1e9+nsec
+    ttime = int(sec*1e9+nsec)
     ttimes.append(ttime)
     secs.append(sec)
-    print("ID=",uid,",Time=",sec,nsec,h.event_nsec,nsec-h.event_nsec)
+    print("Trigger",i,", ID=",uid,",Time=",sec,nsec)
     #print("Event info")
     #evt.display()
     #print("Header info")
     #h.display()
-    
+    i = i+1
   secs = np.array(secs)
   nsecs = np.array(nsecs)
-  ttimes = np.array(ttimes)
+  ttimes = np.array(ttimes,dtype=int)
   ttimesns = ttimes-min(ttimes)
   ttimes = ttimesns/1e9
-  dur = max(ttimes)-min(ttimes)
+  dur = max(ttimes)
   IDs = np.array(IDs)
   units = np.unique(IDs)
   ind = np.argsort(ttimesns)
-  ttimesns_ordered = ttimesns[ind]
   IDs_ordered = IDs[ind]
-  res = np.vstack((IDs_ordered,ttimesns_ordered))
+  secs_ordered = secs[ind]
+  nsecs_ordered = nsecs[ind]
+  res = np.vstack((IDs_ordered,secs_ordered,nsecs_ordered))
   res = res.T
   #for a in range(1,np.shape(res)[0]):
   #  print(res[a,0],res[a,1],res[a,1]-res[a-1,1])
@@ -220,38 +250,24 @@ def get_time(nrun=None,pyf=None):
         print("*** Error for unit",uid,":\nevent",i,": SSS =",secs[IDs==uid][i],"\nevent",i+1,": SSS =",secs[IDs==uid][i+1])
 	
   if DISPLAY:
-    # Build delta_ns info
-    for uid in units:
-      deltat = []
-      thisID = np.argwhere(IDs==uid)
-      otherID = np.argwhere(IDs!=uid)
-      for i in thisID:
-        i = i[0]
-        tg = min(abs(otherID-i))[0]  # Closest index of other units
-        tg = tg+i
-        print("****",i,tg)
-        print(otherID[max(0,tg-10):tg+10])
-        otherNS = nsecs[otherID[max(0,tg-10):tg+10]]
-        print(otherNS)
-        if len(otherNS)>0:
-          dt = min(abs(otherNS-nsecs[i]))
-          deltat.append(dt)
-      
-      pl.figure(12)
-      pl.hist(deltat)
-      pl.show()
-      	
     pl.figure(1)
-    pl.subplot(211)
+    pl.subplot(311)
     for uid in units:
       pl.plot(nsecs[IDs==uid],label=uid)
     pl.xlabel('Trigger nb')
     pl.ylabel('Nanosec counter value')
     pl.legend(loc='best')
-    pl.subplot(212)
-    pl.hist(nsecs,100)
+    pl.subplot(312)
+    for uid in units:
+      pl.hist(nsecs[IDs==uid],100,label=uid)
     pl.xlabel('Nanosec counter value')
     pl.xlim([0,1e9])
+    pl.legend(loc='best')
+    pl.subplot(313)
+    for uid in units:
+      this_nsec = nsecs[IDs==uid]
+      pl.hist(this_nsec[(this_nsec<5e7)&(this_nsec>0)],1000,label=uid)
+
     pl.figure(2)
     for uid in units:
       pl.plot(ttimes[IDs==uid],label=uid)
