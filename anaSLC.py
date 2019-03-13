@@ -25,8 +25,8 @@ def loopSLCRuns(boardID,startrun,endrun):
     loopSLCEvents(boardID,run)
     
 def loopSLCEvents(boardID,RUNID):
-   #datadir = "/home/martineau/GRAND/GRANDproto35/data/ulastai/"
-   datadir = "/mnt/disk/"
+   datadir = "/home/martineau/GRAND/GRANDproto35/data/ulastai/"
+   #datadir = "/mnt/disk/"
    filename = datadir+"S"+str(RUNID)+".yaml"   # To be modified
    if os.path.isfile(filename) is False:
      print('File ',filename,'does not exist. Aborting.')
@@ -98,6 +98,7 @@ def loopSLCEvents(boardID,RUNID):
    nev = len(utcsec)
    conc = np.concatenate((utcsec.reshape(nev,1),Temp.reshape(nev,1),VPower.reshape(nev,6),TrigRate.reshape(nev,7),maxCoarse.reshape(nev,1),),axis=1)   # Concatenate results
    conc = conc.reshape(np.size(utcsec),16) # 
+   print("Now writting to file")
    np.savetxt(reso,conc,fmt='%3.2f')  # Write to file
 
 def displaySLC(boardID):

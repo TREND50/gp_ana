@@ -9,7 +9,7 @@ import yaml
 
 pl.ion()
 c0 = 299792458
-DISPLAY = 0
+DISPLAY = 1
 datafolder = "/home/martineau/GRAND/GRANDproto35/data/ulastai"
 #datafolder = "/mnt/disk"
 #IDsin = []
@@ -108,43 +108,42 @@ def build_coincs(trigtable,uid,d):
   # Search for coincs
   ntrigs = np.shape(trigtable)[0]
   tmax = np.max(d)/c0*1e9*1.5
+  tmax = 1000 # Impose 1mus for now 
   uid = trigtable[:,0]  # Vector of unit UDs
   secs = trigtable[:,1]  # Vector of ttrig times (units = ns; ref = 1st trigger)
   nsecs = trigtable[:,2]
-  secs = secs-min(secs)  # Watch out!!! If not substracted, "times" field is too long...
-  times = secs*1e9+nsecs
+  secscor = secs-min(secs)  # Watch out!!! If not substracted, "times" field is too long...
+  times = secscor*1e9+nsecs
   
   #
   i = 0
   delays = []
-  uid_delays = np.array(delays)
+  uid_delays = []
   uids = []
   while i<ntrigs:   # Loop on all triggers in table
     trig_ref = times[i]
     id_ref = uid[i]
     tsearch = times[i:-1]-trig_ref
-    #tsearchini = times[i:-1]-trig_ref
     tsearch = tsearch[np.argwhere(tsearch<tmax)].T[0]  #  causal timewindow. Transpose needed to get a line vector and avoid []
     idsearch = uid[i:i+len(tsearch)]
-    #othersr = np.argwhere(idsearch!=id_ref).T[0]  # Remove triggers from target antenna
-    _, coinc_ind = np.unique(idsearch, return_index = True) # remove multiple triggers from a same antenna # Warning!!!
+    #print(i,"*** Reference unit:",i,id_ref,uid[i],secs[i],nsecs[i],trig_ref,times[i],", now looking for coincs within",tmax,"ns")
+    #print(idsearch,tsearch)
+    _, coinc_ind = np.unique(idsearch, return_index = True) # remove multiple triggers from a same antenna
     if len(coinc_ind)>1: 
       # there are events in the causal timewindow
-      print(i,"*** Reference unit:",id_ref,times[i],", now looking for coincs within",tmax,"ns")
+      #print(i,"*** Reference unit:",id_ref,times[i],", now looking for coincs within",tmax,"ns")
       #print(np.argwhere(tsearchini<tmax),tsearchini[0:10])
       #print("Units in causal timewindow:",i,i+len(tsearch),idsearch,tsearch,secs[i:i+len(tsearch)],nsecs[i:i+len(tsearch)])
       #print("From different units:",idsearch[others],tsearch[others],others)
-      print("Possible coinc between units",idsearch[coinc_ind],tsearch[coinc_ind],coinc_ind)
-      
+      print(i,": possible coinc at",secs[i],nsecs[i],"between units",idsearch[coinc_ind],tsearch[coinc_ind],coinc_ind)
       uids.append(idsearch[coinc_ind])
       coinc_times = tsearch[coinc_ind]
       coinc_ids = idsearch[coinc_ind]
       
       # Now load delay info (only for histos)
       delays = np.concatenate((delays,coinc_times[coinc_ids!=id_ref]))
-      uid_delays = np.concatenate((uid_delays,idsearch[coinc_ids!=id_ref]))
-      
-      i = i+coinc_ind[-1]+1
+      uid_delays = np.concatenate((uid_delays,coinc_ids[coinc_ids!=id_ref]))
+      i = i+len(coinc_ind)
     else:
       i = i+1
       
@@ -153,7 +152,7 @@ def build_coincs(trigtable,uid,d):
   delays = np.array(delays)
   pl.figure(8)
   for i in uid:
-    pl.hist(delays[uid_delays==i],1000,label='ID{0}'.format(int(i)))
+    pl.hist(delays[uid_delays==i],200,label='ID{0}'.format(int(i)))
   pl.legend(loc='best')
   pl.xlabel('Trigger delay (ns)')
   pl.show()
@@ -195,10 +194,6 @@ def get_time(nrun=None,pyf=None):
     h = evt.header
     sec = h.event_sec
     if 0:
-      if uid == 6:
-          sec = sec-1
-      if uid == 9:
-          sec = sec-1
       if uid == 18:
           sec = sec-1
       if uid == 31:
@@ -215,8 +210,6 @@ def get_time(nrun=None,pyf=None):
       cor = 1
     nsec = nsec*cor
     nsecs.append(nsec)
-    ttime = int(sec*1e9+nsec)
-    ttimes.append(ttime)
     secs.append(sec)
     print("Trigger",i,", ID=",uid,",Time=",sec,nsec)
     #print("Event info")
@@ -226,9 +219,10 @@ def get_time(nrun=None,pyf=None):
     i = i+1
   secs = np.array(secs)
   nsecs = np.array(nsecs)
+  # Build total time info. Warning: set ref @ 1st event otherwise value too large and argsort fails!!!
+  ttimes = (secs-min(secs))*1e9+nsecs
   ttimes = np.array(ttimes,dtype=int)
-  ttimesns = ttimes-min(ttimes)
-  ttimes = ttimesns/1e9
+  ttimesns = ttimes-min(ttimes)  
   dur = max(ttimes)
   IDs = np.array(IDs)
   units = np.unique(IDs)
@@ -238,8 +232,6 @@ def get_time(nrun=None,pyf=None):
   nsecs_ordered = nsecs[ind]
   res = np.vstack((IDs_ordered,secs_ordered,nsecs_ordered))
   res = res.T
-  #for a in range(1,np.shape(res)[0]):
-  #  print(res[a,0],res[a,1],res[a,1]-res[a-1,1])
   for uid in units:
       tdif = np.diff(ttimes[IDs==uid])
       aid = np.argwhere(tdif<0)
@@ -358,14 +350,9 @@ if __name__ == '__main__':
        f = load_data(sys.argv[1])
        if f == None:
          sys.exit()
-       #display_events(pyf = f,tid=9)
+       #display_events(pyf = f,tid=3)
        uid,distmat = build_distmat()
        #print(uid,distmat)
        #input()
        trigtable = get_time(pyf=f)  # 2-lines matrix with [0,:]=UnitIDs and [1,:]=trigtimes
        build_coincs(trigtable,uid,distmat)
-     #pl.figure(1)
-     #pl.plot(trigtable[1,:])
-     #pl.figure(2)
-     #pl.plot(trigtable[0,:])
-     #pl.show()
