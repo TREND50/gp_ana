@@ -1,3 +1,11 @@
+# Script to read GP35 data produced by the RUST DAQ software
+# and in particular build the coinctable.txt file
+# to be used for the TREND recons software
+
+# OMH January 2019
+
+
+
 import os
 import sys
 sys.path.append("../")
@@ -105,104 +113,132 @@ def build_distmat():
 
 
 def build_coincs(trigtable,uid,d):
-  # Search for coincs
+# Search for coincs
+  print("Now searching for coincidences...")
   ntrigs = np.shape(trigtable)[0]
-  tmax = np.max(d)/c0*1e9*1.5
-  tmax = 1000 # Impose 1mus for now 
+  tmax = np.max(d)/c0*1e9*1.5  # Factor 1.5 to give some flexibility # TBD: adjust for each pair of antennas
+  #tmax = 2000 # Impose 1mus for now 
   uid = trigtable[:,0]  # Vector of unit UDs
-  secs = trigtable[:,1]  # Vector of ttrig times (units = ns; ref = 1st trigger)
-  nsecs = trigtable[:,2]
-  secscor = secs-min(secs)  # Watch out!!! If not substracted, "times" field is too long...
-  times = secscor*1e9+nsecs
+  secs = trigtable[:,1]  # Vector of seconds info
+  secscor = secs-min(secs)  #  Use f1st second as reference. Otherwise "times" field is too long and subsequent operations fail...
+  nsecs = trigtable[:,2] # Vector of nanoseconds info
+  times = secscor*1e9+nsecs # Build complete time info. Units = ns. 
   
   #
   i = 0
+  coinc_nb = 0
   delays = []
   uid_delays = []
-  uids = []
-  while i<ntrigs:   # Loop on all triggers in table
+  filename = 'R{0}_coinctable.txt'.format(sys.argv[1])  # File where coincs should be written, latter used for source reconstruction
+  while i<ntrigs:   
+  # Loop on all triggers in table
     trig_ref = times[i]
     id_ref = uid[i]
     tsearch = times[i:-1]-trig_ref
-    tsearch = tsearch[np.argwhere(tsearch<tmax)].T[0]  #  causal timewindow. Transpose needed to get a line vector and avoid []
+    tsearch = tsearch[np.argwhere(tsearch<tmax)].T[0]  #  Search in causal timewindow. Transpose needed to get a line vector and avoid []
     idsearch = uid[i:i+len(tsearch)]
     #print(i,"*** Reference unit:",i,id_ref,uid[i],secs[i],nsecs[i],trig_ref,times[i],", now looking for coincs within",tmax,"ns")
     #print(idsearch,tsearch)
-    _, coinc_ind = np.unique(idsearch, return_index = True) # remove multiple triggers from a same antenna
-    if len(coinc_ind)>1: 
+    _, coinc_ind = np.unique(idsearch, return_index = True) # Remove multiple triggers from a same antenna
+    if len(coinc_ind)>3:  # Require 4 antennas at least to perform recons
       # there are events in the causal timewindow
+      coinc_nb = coinc_nb+1  # INcrement coinc counter
       #print(i,"*** Reference unit:",id_ref,times[i],", now looking for coincs within",tmax,"ns")
       #print(np.argwhere(tsearchini<tmax),tsearchini[0:10])
       #print("Units in causal timewindow:",i,i+len(tsearch),idsearch,tsearch,secs[i:i+len(tsearch)],nsecs[i:i+len(tsearch)])
       #print("From different units:",idsearch[others],tsearch[others],others)
-      print(i,": possible coinc at",secs[i],nsecs[i],"between units",idsearch[coinc_ind],tsearch[coinc_ind],coinc_ind)
-      uids.append(idsearch[coinc_ind])
-      coinc_times = tsearch[coinc_ind]
+      mult = len(coinc_ind)
+      print(coinc_nb,": possible coinc at (",int(secs[i]),"s;",nsecs[i],"ns) between",mult,"units:",idsearch[coinc_ind],tsearch[coinc_ind])
+
       coinc_ids = idsearch[coinc_ind]
+      coinc_ids = np.array([coinc_ids])  # Anybody able to explain why coinc_id is not a numpy.array???
+      coinc_times = tsearch[coinc_ind]
+      coinc_times = np.array([coinc_times])
       
+      # Write to file
+      # Format: Unix sec; Unit ID, Evt Nb, Coinc Nb, Trig time (ns), [0]x7 
+      evts = np.array([range(i,i+mult)],dtype = int).T
+      one = np.ones((mult,1),dtype=int)
+      this_coinc = np.hstack((secs[i]*one,coinc_ids.T,evts,coinc_nb*one,coinc_times.T))
+      #print(this_coinc)
+      if coinc_nb == 1:
+        all_coincs = this_coinc
+      else:
+        all_coincs = np.concatenate((all_coincs,this_coinc))
+
       # Now load delay info (only for histos)
       delays = np.concatenate((delays,coinc_times[coinc_ids!=id_ref]))
       uid_delays = np.concatenate((uid_delays,coinc_ids[coinc_ids!=id_ref]))
       i = i+len(coinc_ind)
+      
     else:
       i = i+1
-      
-  uid_delays = np.array(uid_delays)
-  uid = np.unique(uid_delays)
-  delays = np.array(delays)
-  pl.figure(8)
-  for i in uid:
-    pl.hist(delays[uid_delays==i],200,label='ID{0}'.format(int(i)))
-  pl.legend(loc='best')
-  pl.xlabel('Trigger delay (ns)')
-  pl.show()
+  
+  np.savetxt(filename,all_coincs,fmt='%d')  # Write to file
+          
+  if DISPLAY:
+    uid_delays = np.array(uid_delays)
+    uid = np.unique(uid_delays)
+    #delays = np.array(delays)
+    pl.figure(8)
+    for i in uid:
+      pl.hist(delays[uid_delays==i],200,label='ID{0}'.format(int(i)))
+    pl.xlim([0,tmax])
+    pl.legend(loc='best')
+    pl.xlabel('Trigger delay (ns)')
+    pl.show()
                     
+		  
 		    
 def get_time(nrun=None,pyf=None):
 # Retrieves time info from datafile
-  
+  print("Now building trigger time table from data...")
   if pyf == None:
     print("No pyef object, loading it from run number.")
     if nrun == None:
       print("get_time error! Pass run number or pyef object as argument")
       return
     pyf = load_data(nrun)
-
   
+  if nrun == None:
+    nrun = sys.argv[1]
+    
   nevts = len(pyf.event_list)
   #print(nevts,"events in file",datafile)
   # TBD: access file header
 
+  # Loop on all events
   secs = []
   nsecs = []
   ttimes = []
   IDs = []
   i = 0
   for evt in f.event_list:
-  # Loop on all events
     #print("\n\n!!!New event!!!")
+    # Loop on all units in the event (at present should be only one)
     for ls in evt.local_station_list:
     # Loop on all units involved in event (should be one only at this stage)
       #print("Local unit info")
       #ls.display()
-      #print("LS ID=")
-      #print(ls.header.ls_id)
       uid = int(ls.header.ls_id-356) # 16 lowest bits of IP adress --256 to go down to 8 lowest digits of IP adress & -100 to go down to antenna ID
       IDs.append(uid) 
-      #nsec = ls.header.gps_nanoseconds  # What is that one for???
-      
+      #nsec = ls.header.gps_nanoseconds  # GPS info for that specific unit
+    
     h = evt.header
     sec = h.event_sec
-    if 0:
-      if uid == 18:
-          sec = sec-1
-      if uid == 31:
-          sec = sec-1	        
-#      if uid == 9:
-#        sec = sec-3  # Dirty fix R167!!! To be solved
-#      if uid == 18:
-#        sec = sec-5  # Dirty fix R167!!! To be solved
+    # Correct for possible SSS offset error - To Be Fixed
+    #if sys.argv[1] == "222": # Offset for 26000 1rst events. Then jump sets it correctly 
+    #  if uid == 3:
+    #	   sec = sec+1
+    #  if uid == 5:
+    #	   sec = sec+1  	 
+    #  if uid == 18:
+    #      sec = sec+1  
+    #if sys.argv[1] == "230":  # Offset for 22000 first events. Then jump sets it correctly 
+    #  if uid == 9:
+    #    sec = sec
     nsec = h.event_nsec
+
     # Now correct time from maxCoarse value
     maxcoarse = getMaxCoarse(uid,sec)
     cor=125e6/(getMaxCoarse(uid,sec)+1)
@@ -211,80 +247,99 @@ def get_time(nrun=None,pyf=None):
     nsec = nsec*cor
     nsecs.append(nsec)
     secs.append(sec)
-    print("Trigger",i,", ID=",uid,",Time=",sec,nsec)
+
+    #print("Event",i,", ID=",uid,",Time=",sec,nsec)
     #print("Event info")
     #evt.display()
     #print("Header info")
     #h.display()
     i = i+1
+    
   secs = np.array(secs)
   nsecs = np.array(nsecs)
-  # Build total time info. Warning: set ref @ 1st event otherwise value too large and argsort fails!!!
-  ttimes = (secs-min(secs))*1e9+nsecs
+  # Build total time info. Warning: set 1st event as reference otherwise value too large and argsort fails!!!
+  if min(secs)<1:
+    print("Error!!! Minimal second info =",min(secs),". Abort.")
+    return
+  # Build time info  
+  ttimes = (secs-min(secs))*1e9+nsecs  # Set 1st event as reference
   ttimes = np.array(ttimes,dtype=int)
-  ttimesns = ttimes-min(ttimes)  
-  dur = max(ttimes)
+  ttimes = (ttimes-min(ttimes))/1e9
+  # Order in time
   IDs = np.array(IDs)
   units = np.unique(IDs)
-  ind = np.argsort(ttimesns)
+  ind = np.argsort(ttimes)
   IDs_ordered = IDs[ind]
   secs_ordered = secs[ind]
   nsecs_ordered = nsecs[ind]
   res = np.vstack((IDs_ordered,secs_ordered,nsecs_ordered))
   res = res.T
+  
+  # Check for errors
+  # TBD: add  flag for events with time info = 0
+  
+  # Check for time offsets
+  #tdif = np.diff(secs)
+  #aid = np.argwhere(tdif<0)
+  #for i in aid:
+  #   print("***Warning! Possible error on SSS value for board",IDs[i+1],":\nevent",i," on board",IDs[i],": SSS =",secs[i],"\nevent",i+1," on board",IDs[i+1],": SSS =",secs[i+1],"\nevent",i+2," on board",IDs[i+2],": SSS =",secs[i+2])
+
+  # Check for time jumps in the past
   for uid in units:
-      tdif = np.diff(ttimes[IDs==uid])
+      tdif = np.diff(secs[IDs==uid])
       aid = np.argwhere(tdif<0)
       for i in aid:
         #print(ind)
         #i = ind[1]
         #print(i,j,aid[j],xx)
-        print("*** Error for unit",uid,":\nevent",i,": SSS =",secs[IDs==uid][i],"\nevent",i+1,": SSS =",secs[IDs==uid][i+1])
+        print("***Warning! Jump in past for unit",uid,"from SSS =",secs[IDs==uid][i],"to SSS =",secs[IDs==uid][i+1])
 	
+  # Plot a few graphs to check run quality
   if DISPLAY:
     pl.figure(1)
-    pl.subplot(311)
+    pl.subplot(211)
     for uid in units:
       pl.plot(nsecs[IDs==uid],label=uid)
-    pl.xlabel('Trigger nb')
+    pl.xlabel('Event nb')
     pl.ylabel('Nanosec counter value')
     pl.legend(loc='best')
-    pl.subplot(312)
+    pl.subplot(212)
     for uid in units:
       pl.hist(nsecs[IDs==uid],100,label=uid)
     pl.xlabel('Nanosec counter value')
     pl.xlim([0,1e9])
     pl.legend(loc='best')
-    pl.subplot(313)
-    for uid in units:
-      this_nsec = nsecs[IDs==uid]
-      pl.hist(this_nsec[(this_nsec<5e7)&(this_nsec>0)],1000,label=uid)
 
     pl.figure(2)
     for uid in units:
       pl.plot(ttimes[IDs==uid],label=uid)
-    pl.xlabel('Trigger nb')
+    pl.xlabel('Event nb')
     pl.ylabel('Trigger time (s)')
     pl.legend(loc='best')
-    pl.title('Triggers')
+    pl.title('Event rate')
     
     pl.figure(3)
     pl.hist(IDs,100)
     pl.xlabel("Unit ID")
+    pl.ylabel("Nb of events")
     
     pl.show()
+    
+    dur = max(ttimes)
+    print(nevts,"events in run",nrun)
+    print("Run duration:",dur,"seconds.")
+    print("Units present in run:")
+    for uid in units:
+      print("Unit",uid,":",np.shape(np.where(IDs==uid))[1],"events.")
+    input()
 
-  print(nevts,"events in run",nrun)
-  print("Run duration:",dur,"seconds.")
-  print("Units present in run:")
-  for uid in units:
-    print("Unit",uid,":",np.shape(np.where(IDs==uid))[1],"events.")
-  
+  # Format: ID sec nsec (ordered by increasing time)
   return res
 
 
 def display_events(nrun=None,pyf=None,tid=None):
-# Display events
+# Display timetraces
+  print("Displaying timetraces for unit",tid)
   lab = ['X','Y','Z','Cal']
   if pyf == None:
     print("No pyef object, loading it from run number.")
@@ -302,7 +357,7 @@ def display_events(nrun=None,pyf=None,tid=None):
     for ls in evt.local_station_list:
     # Loop on all units involved in event (should be one only at this stage)
       uid = ls.header.ls_id - 356 # Remove 255 for digits 8-16 in IP adress & 100 for unit ID
-      if tid==None or uid ==tid:  
+      if tid==None or uid == tid:  
       # Display 
         raw = ls.adc_buffer
         hraw = [hex(int(a)) for a in raw]  # Transfer back to hexadecimal
@@ -343,14 +398,19 @@ def load_data(nrun):
 
 
 if __name__ == '__main__':
-     if len(sys.argv)!=2:
-       print("Usage: >readData RUNID")
+     if len(sys.argv)<2:
+       print("Usage: >readData RUNID [BOARDID]")
      else: 
-       loadMaxCoarse(sys.argv[1])
+       # First load data
        f = load_data(sys.argv[1])
        if f == None:
          sys.exit()
-       #display_events(pyf = f,tid=3)
+	 
+       # Display events
+       display_events(pyf = f,tid=int(sys.argv[2]))
+       
+       # Perform recons
+       loadMaxCoarse(sys.argv[1])
        uid,distmat = build_distmat()
        #print(uid,distmat)
        #input()
