@@ -14,6 +14,9 @@ import pyef
 import numpy as np
 import pylab as pl
 import yaml
+import scipy
+from scipy.optimize import curve_fit
+
 
 pl.ion()
 c0 = 299792458
@@ -114,6 +117,7 @@ def build_distmat():
 
 def build_coincs(trigtable,uid,d):
 # Search for coincs
+  nrun = sys.argv[1]
   print("Now searching for coincidences...")
   ntrigs = np.shape(trigtable)[0]
   tmax = np.max(d)/c0*1e9*1.5  # Factor 1.5 to give some flexibility # TBD: adjust for each pair of antennas
@@ -140,7 +144,7 @@ def build_coincs(trigtable,uid,d):
     #print(i,"*** Reference unit:",i,id_ref,uid[i],secs[i],nsecs[i],trig_ref,times[i],", now looking for coincs within",tmax,"ns")
     #print(idsearch,tsearch)
     _, coinc_ind = np.unique(idsearch, return_index = True) # Remove multiple triggers from a same antenna
-    if len(coinc_ind)>3:  # Require 4 antennas at least to perform recons
+    if len(coinc_ind)>3:  # Requires 4 antennas at least to perform recons
       # there are events in the causal timewindow
       coinc_nb = coinc_nb+1  # INcrement coinc counter
       #print(i,"*** Reference unit:",id_ref,times[i],", now looking for coincs within",tmax,"ns")
@@ -176,20 +180,57 @@ def build_coincs(trigtable,uid,d):
   
   np.savetxt(filename,all_coincs,fmt='%d')  # Write to file
           
+  uid_delays = np.array(uid_delays)
+  uid = np.unique(uid_delays)
+  #delays = np.array(delays)
+  pl.figure(8)
+  for i in uid:
+    h,b,_ = pl.hist(delays[uid_delays==i],200,label='ID{0}'.format(int(i)))
+  pl.xlim([0,tmax])
+  pl.legend(loc='best')
+  pl.xlabel('Trigger delay (ns)')
+  pl.savefig('delays_R{0}'.format(sys.argv[1]))
+  filename = "R{0}_trig_delays.npz".format(nrun)
+  np.savez("trig_delays",delays,uid_delays)  # Write to file
+  
   if DISPLAY:
-    uid_delays = np.array(uid_delays)
-    uid = np.unique(uid_delays)
-    #delays = np.array(delays)
-    pl.figure(8)
-    for i in uid:
-      pl.hist(delays[uid_delays==i],200,label='ID{0}'.format(int(i)))
-    pl.xlim([0,tmax])
-    pl.legend(loc='best')
-    pl.xlabel('Trigger delay (ns)')
     pl.show()
+  
+
+# Define model function to be used to fit to the data above:
+def gauss(x, *p):
+    A, mu, sigma = p
+    return A*np.exp(-(x-mu)**2/(2.*sigma**2))
                     
-		  
-		    
+
+def fitDelays(filename):
+  a = np.load(filename)
+  delays = a['arr_0']
+  uids = a['arr_1']
+  uid = np.unique(uids)
+  
+  pl.figure(12)
+  for i in uid:
+        h,b,_ = pl.hist(delays[uids==i],1000,label='ID{0}'.format(int(i)))
+        
+	# Perform Gaussian fit
+        valMax = np.max(h)
+        if valMax>10:
+          posMax = b[np.argmax(h)]
+          p0 = [valMax,posMax,20.]
+          bc = (b[:-1] + b[1:])/2
+          coeff, var_matrix = curve_fit(gauss, bc, h, p0=p0)
+          h_fit = gauss(bc, *coeff)
+          #pl.plot(bc, h, label='ID{0}'.format(int(i)))
+          pl.plot(bc, h_fit)
+          print('Unit',int(i),': mean trig delay',coeff[1],'ns latter than 1st trigger')
+          print('Trigger time dispertion = ', coeff[2]/np.sqrt(2),'ns')
+    
+  pl.xlim([0,6000])
+  pl.legend(loc='best')
+  pl.xlabel('Trigger delay (ns)')
+  input()
+  	    
 def get_time(nrun=None,pyf=None):
 # Retrieves time info from datafile
   print("Now building trigger time table from data...")
@@ -221,15 +262,20 @@ def get_time(nrun=None,pyf=None):
       #print("Local unit info")
       #ls.display()
       uid = int(ls.header.ls_id-356) # 16 lowest bits of IP adress --256 to go down to 8 lowest digits of IP adress & -100 to go down to antenna ID
+      #if uid == 3:
+      #  continue
       IDs.append(uid) 
       #nsec = ls.header.gps_nanoseconds  # GPS info for that specific unit
     
+    #if uid == 3:
+    #  print("Skipping unit 03")
+    #  continue
     h = evt.header
     sec = h.event_sec
     # Correct for possible SSS offset error - To Be Fixed
-    #if sys.argv[1] == "222": # Offset for 26000 1rst events. Then jump sets it correctly 
-    #  if uid == 3:
-    #	   sec = sec+1
+    if sys.argv[1] == "237": # Offset for 26000 1rst events. Then jump sets it correctly 
+      if uid == 3:
+    	   sec = sec-1
     #  if uid == 5:
     #	   sec = sec+1  	 
     #  if uid == 18:
@@ -248,7 +294,7 @@ def get_time(nrun=None,pyf=None):
     nsecs.append(nsec)
     secs.append(sec)
 
-    #print("Event",i,", ID=",uid,",Time=",sec,nsec)
+    print("Event",i,", ID=",uid,",Time=",sec,nsec)
     #print("Event info")
     #evt.display()
     #print("Header info")
@@ -295,44 +341,46 @@ def get_time(nrun=None,pyf=None):
         print("***Warning! Jump in past for unit",uid,"from SSS =",secs[IDs==uid][i],"to SSS =",secs[IDs==uid][i+1])
 	
   # Plot a few graphs to check run quality
-  if DISPLAY:
-    pl.figure(1)
-    pl.subplot(211)
-    for uid in units:
-      pl.plot(nsecs[IDs==uid],label=uid)
-    pl.xlabel('Event nb')
-    pl.ylabel('Nanosec counter value')
-    pl.legend(loc='best')
-    pl.subplot(212)
-    for uid in units:
-      pl.hist(nsecs[IDs==uid],100,label=uid)
-    pl.xlabel('Nanosec counter value')
-    pl.xlim([0,1e9])
-    pl.legend(loc='best')
+  pl.figure(1)
+  pl.subplot(211)
+  for uid in units:
+    pl.plot(nsecs[IDs==uid],label=uid)
+  pl.xlabel('Event nb')
+  pl.ylabel('Nanosec counter value')
+  pl.legend(loc='best')
+  pl.subplot(212)
+  for uid in units:
+    pl.hist(nsecs[IDs==uid],100,label=uid)
+  pl.xlabel('Nanosec counter value')
+  pl.xlim([0,1e9])
+  pl.legend(loc='best')
 
-    pl.figure(2)
-    for uid in units:
-      pl.plot(ttimes[IDs==uid],label=uid)
-    pl.xlabel('Event nb')
-    pl.ylabel('Trigger time (s)')
-    pl.legend(loc='best')
-    pl.title('Event rate')
-    
-    pl.figure(3)
-    pl.hist(IDs,100)
-    pl.xlabel("Unit ID")
-    pl.ylabel("Nb of events")
-    
+  pl.figure(2)
+  for uid in units:
+    pl.plot(ttimes[IDs==uid],label=uid)
+  pl.xlabel('Event nb')
+  pl.ylabel('Trigger time (s)')
+  pl.legend(loc='best')
+  pl.title('Event rate')
+  pl.savefig('EventRate_R{0}'.format(sys.argv[1]))
+  
+  pl.figure(3)
+  pl.hist(IDs,100)
+  pl.xlabel("Unit ID")
+  pl.ylabel("Nb of events")
+  pl.savefig('NbEvents_R{0}'.format(sys.argv[1]))
+  
+  dur = max(ttimes)
+  print(nevts,"events in run",nrun)
+  print("Run duration:",dur,"seconds.")
+  print("Units present in run:")
+  for uid in units:
+    print("Unit",uid,":",np.shape(np.where(IDs==uid))[1],"events.")
+  input()
+  
+  if DISPLAY:
     pl.show()
     
-    dur = max(ttimes)
-    print(nevts,"events in run",nrun)
-    print("Run duration:",dur,"seconds.")
-    print("Units present in run:")
-    for uid in units:
-      print("Unit",uid,":",np.shape(np.where(IDs==uid))[1],"events.")
-    input()
-
   # Format: ID sec nsec (ordered by increasing time)
   return res
 
@@ -379,17 +427,21 @@ def display_events(nrun=None,pyf=None,tid=None):
         pl.xlabel('Time ($\mu$s)')
         pl.ylabel('Voltage (V)')
         pl.legend(loc="best")
-        pl.show()
-        input()
-        pl.close(1)
-	
+        if DISPLAY:
+          pl.show()
+          input()
+          pl.close('all')
+
 	
 def load_data(nrun):
 # Loads pyef object
   datafile = datafolder+"/R"+nrun+".data.bin"
   if os.path.isfile(datafile) is False:
-     print('File ',datafile,'does not exist. Aborting.')
-     return
+     print('File ',datafile,'does not exist. \nNow trying MinBias file...')
+     datafile = datafolder+"/M"+nrun+".data.bin"
+     if os.path.isfile(datafile) is False:
+       print('File ',datafile,'does not exist either. \nAborting.')
+       return
 
   print("Loading",datafile,"...")
   pyf = pyef.read_file(datafile)  #TBD: add error message if fails.
@@ -401,18 +453,22 @@ if __name__ == '__main__':
      if len(sys.argv)<2:
        print("Usage: >readData RUNID [BOARDID]")
      else: 
+       
+       #filename = "R{0}_trig_delays.npz".format(sys.argv[1])
+       #fitDelays(filename)
+       
+       
        # First load data
        f = load_data(sys.argv[1])
        if f == None:
          sys.exit()
 	 
-       # Display events
-       display_events(pyf = f,tid=int(sys.argv[2]))
+       if len(sys.argv)==3:# Display events for BoardID
+         print('Calling display_events() for unit',sys.argv[2])
+         display_events(pyf = f,tid=int(sys.argv[2]))
        
        # Perform recons
        loadMaxCoarse(sys.argv[1])
        uid,distmat = build_distmat()
-       #print(uid,distmat)
-       #input()
        trigtable = get_time(pyf=f)  # 2-lines matrix with [0,:]=UnitIDs and [1,:]=trigtimes
        build_coincs(trigtable,uid,distmat)
