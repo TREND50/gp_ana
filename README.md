@@ -4,7 +4,7 @@ Analysis tool for GP data (Rust)
 Relevant tools are available with 3 script at present:
 
 ## [readData.py](https://github.com/TREND50/gp_ana/blob/master/readData.py)
-Script to read GP35 data produced by the RUST DAQ software and manipulate it. Relies on ```pyef``` package to access data. Main functions are:
+Script to read GP35 data produced by the RUST DAQ software and manipulate it. Relies on [```pyef```](https://github.com/TREND50/pyef) package to access data. Main functions are:
 
 ### display_events():
 Loads data and displays timetraces 
