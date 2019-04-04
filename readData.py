@@ -1,6 +1,6 @@
 # Script to read GP35 data produced by the RUST DAQ software
 # and in particular build the coinctable.txt file
-# to be used for the TREND recons software
+# to be used with the gp_recons software to reconstruct shower direction of origin
 
 # OMH January 2019
 
@@ -17,15 +17,18 @@ import yaml
 import scipy
 from scipy.optimize import curve_fit
 
-
+DISPLAY = 1  # Switch to 1 for additionnal plots
+ULASTAI = 0
+if ULASTAI:
+  datafolder = "/mnt/disk"  
+else:  # @ local computer
+  datafolder = "/home/martineau/GRAND/GRANDproto35/data/ulastai"  
+  
 pl.ion()
 c0 = 299792458
-DISPLAY = 1
-datafolder = "/home/martineau/GRAND/GRANDproto35/data/ulastai"
-#datafolder = "/mnt/disk"
-#IDsin = []
 utcSLC = []    
 maxCoarse = []
+
 def twos_comp(val, bits):
     """compute the 2's compliment of int value val"""
     if (val & (1 << (bits - 1))) != 0: # if sign bit is set e.g., 8bit: 128-255
@@ -34,17 +37,20 @@ def twos_comp(val, bits):
 
 
 def loadMaxCoarse(runid): 
+  # Load max coarse info from SLC file
   global IDsin
   allIDs = []
   allUTC = []
   allMaxCoarse = []
+  
+  # First check that file exists
   slcfile = datafolder+"/S"+runid+".yaml"
   if os.path.isfile(slcfile) is False:
      print('File ',slcfile,'does not exist. Aborting.')
      IDsin = []
      return
   
-  # Now read SLC file ad dump infos in arrays
+  # Now read SLC file and dump infos into numpy arrays
   print('Scanning SLC file',slcfile)
   print("Loading SLC data...")
   dataf=yaml.load_all(open(slcfile))
@@ -69,24 +75,13 @@ def loadMaxCoarse(runid):
     
     
 def getMaxCoarse(uid,utcsec):
-  #try:
-  #  if len(IDsin) == 0:  # SLC data was not yet loaded
-  #    print("Ooops... No MaxCoarse info yet! Fetching it from SLC data.")
-  #    loadMaxCoarse(sys.argv[1])     
-  #  else:
-  #    print("MaxCoarse info available for following units",IDsin)
-     
-  #except:
-  #  print("Ooops... No MaxCoarse info yet! Fetching it from SLC data.")
-  #  loadMaxCoarse(sys.argv[1])      
-  
-  
-  # Now retrieve proper maxCoarse info
+  # Retrieve maxCoarse value closests in time to event triggered @ t = utcsec
   i = np.nonzero(IDsin == uid)[0]  
   if len(i)>0:  # Unit found in SLC data
     i = i[0]
     indt = np.argmin(np.abs(utcSLC[i]-utcsec))
     #print(utcsec,utcSLC[i][indt],maxCoarse[i][indt])
+    # TBD: implement "closest time" condition (<1h)?
   else:  # Unit not found in LSC data
     return 0
     
@@ -116,15 +111,15 @@ def build_distmat():
 
 
 def build_coincs(trigtable,uid,d):
-# Search for coincs
+  # Search for coincs
   nrun = sys.argv[1]
   print("Now searching for coincidences...")
   ntrigs = np.shape(trigtable)[0]
-  tmax = np.max(d)/c0*1e9*1.5  # Factor 1.5 to give some flexibility # TBD: adjust for each pair of antennas
-  #tmax = 2000 # Impose 1mus for now 
+  tmax = np.max(d)/c0*1e9*1.1  # Factor 1.1 to give some flexibility 
+  # TBD: adjust tmax for each pair of antennas
   uid = trigtable[:,0]  # Vector of unit UDs
   secs = trigtable[:,1]  # Vector of seconds info
-  secscor = secs-min(secs)  #  Use f1st second as reference. Otherwise "times" field is too long and subsequent operations fail...
+  secscor = secs-min(secs)  #  Use first second as reference. Otherwise "times" field is too long and subsequent operations fail...
   nsecs = trigtable[:,2] # Vector of nanoseconds info
   times = secscor*1e9+nsecs # Build complete time info. Units = ns. 
   
@@ -142,7 +137,6 @@ def build_coincs(trigtable,uid,d):
     tsearch = tsearch[np.argwhere(tsearch<tmax)].T[0]  #  Search in causal timewindow. Transpose needed to get a line vector and avoid []
     idsearch = uid[i:i+len(tsearch)]
     #print(i,"*** Reference unit:",i,id_ref,uid[i],secs[i],nsecs[i],trig_ref,times[i],", now looking for coincs within",tmax,"ns")
-    #print(idsearch,tsearch)
     _, coinc_ind = np.unique(idsearch, return_index = True) # Remove multiple triggers from a same antenna
     if len(coinc_ind)>3:  # Requires 4 antennas at least to perform recons
       # there are events in the causal timewindow
@@ -160,11 +154,10 @@ def build_coincs(trigtable,uid,d):
       coinc_times = np.array([coinc_times])
       
       # Write to file
-      # Format: Unix sec; Unit ID, Evt Nb, Coinc Nb, Trig time (ns), [0]x7 
+      # Format: Unix sec; Unit ID, Evt Nb, Coinc Nb, Trig time (ns)
       evts = np.array([range(i,i+mult)],dtype = int).T
       one = np.ones((mult,1),dtype=int)
       this_coinc = np.hstack((secs[i]*one,coinc_ids.T,evts,coinc_nb*one,coinc_times.T))
-      #print(this_coinc)
       if coinc_nb == 1:
         all_coincs = this_coinc
       else:
@@ -182,7 +175,6 @@ def build_coincs(trigtable,uid,d):
           
   uid_delays = np.array(uid_delays)
   uid = np.unique(uid_delays)
-  #delays = np.array(delays)
   pl.figure(8)
   for i in uid:
     h,b,_ = pl.hist(delays[uid_delays==i],200,label='ID{0}'.format(int(i)))
@@ -191,19 +183,14 @@ def build_coincs(trigtable,uid,d):
   pl.xlabel('Trigger delay (ns)')
   pl.savefig('delays_R{0}'.format(sys.argv[1]))
   filename = "R{0}_trig_delays.npz".format(nrun)
-  np.savez("trig_delays",delays,uid_delays)  # Write to file
+  np.savez("trig_delays",delays,uid_delays)  # Write delay histogram to file for faster access for further work on this distribution (see fitDelays())
   
   if DISPLAY:
     pl.show()
   
 
-# Define model function to be used to fit to the data above:
-def gauss(x, *p):
-    A, mu, sigma = p
-    return A*np.exp(-(x-mu)**2/(2.*sigma**2))
-                    
-
 def fitDelays(filename):
+  # Fit trigger delay distribution with gaussian distrib in order to estimate timing resolution
   a = np.load(filename)
   delays = a['arr_0']
   uids = a['arr_1']
@@ -231,8 +218,13 @@ def fitDelays(filename):
   pl.xlabel('Trigger delay (ns)')
   input()
   	    
+def gauss(x, *p):
+    A, mu, sigma = p
+    return A*np.exp(-(x-mu)**2/(2.*sigma**2))
+                    
+
 def get_time(nrun=None,pyf=None):
-# Retrieves time info from datafile
+  # Retrieves time info from datafile and order it in increasing order
   print("Now building trigger time table from data...")
   if pyf == None:
     print("No pyef object, loading it from run number.")
@@ -245,8 +237,6 @@ def get_time(nrun=None,pyf=None):
     nrun = sys.argv[1]
     
   nevts = len(pyf.event_list)
-  #print(nevts,"events in file",datafile)
-  # TBD: access file header
 
   # Loop on all events
   secs = []
@@ -258,33 +248,22 @@ def get_time(nrun=None,pyf=None):
     #print("\n\n!!!New event!!!")
     # Loop on all units in the event (at present should be only one)
     for ls in evt.local_station_list:
-    # Loop on all units involved in event (should be one only at this stage)
+      # Loop on all units involved in event (should be one only at this stage)
       #print("Local unit info")
       #ls.display()
       uid = int(ls.header.ls_id-356) # 16 lowest bits of IP adress --256 to go down to 8 lowest digits of IP adress & -100 to go down to antenna ID
-      #if uid == 3:
+      #if uid == 3:  # Dirty trick to exclude one antenna from analysis
       #  continue
       IDs.append(uid) 
       #nsec = ls.header.gps_nanoseconds  # GPS info for that specific unit
     
-    #if uid == 3:
+    #if uid == 3: # Dirty trick to exclude one antenna from analysis. Redondant with event.header.event_nsec at this stage (one unit per event only)
     #  print("Skipping unit 03")
     #  continue
+    
     h = evt.header
     sec = h.event_sec
-    # Correct for possible SSS offset error - To Be Fixed
-    if sys.argv[1] == "237": # Offset for 26000 1rst events. Then jump sets it correctly 
-      if uid == 3:
-    	   sec = sec-1
-    #  if uid == 5:
-    #	   sec = sec+1  	 
-    #  if uid == 18:
-    #      sec = sec+1  
-    #if sys.argv[1] == "230":  # Offset for 22000 first events. Then jump sets it correctly 
-    #  if uid == 9:
-    #    sec = sec
     nsec = h.event_nsec
-
     # Now correct time from maxCoarse value
     maxcoarse = getMaxCoarse(uid,sec)
     cor=125e6/(getMaxCoarse(uid,sec)+1)
@@ -294,7 +273,7 @@ def get_time(nrun=None,pyf=None):
     nsecs.append(nsec)
     secs.append(sec)
 
-    print("Event",i,", ID=",uid,",Time=",sec,nsec)
+    print("Event",i,", ID=",uid,",Time=",sec,nsec)  # Can be used to check that SSS is OK.
     #print("Event info")
     #evt.display()
     #print("Header info")
@@ -322,7 +301,7 @@ def get_time(nrun=None,pyf=None):
   res = res.T
   
   # Check for errors
-  # TBD: add  flag for events with time info = 0
+  # TBD: add  flag for events with time info = 0 (ie no GPS info)
   
   # Check for time offsets
   #tdif = np.diff(secs)
@@ -386,7 +365,7 @@ def get_time(nrun=None,pyf=None):
 
 
 def display_events(nrun=None,pyf=None,tid=None):
-# Display timetraces
+  # Display timetraces for unit tid
   print("Displaying timetraces for unit",tid)
   lab = ['X','Y','Z','Cal']
   if pyf == None:
@@ -396,17 +375,16 @@ def display_events(nrun=None,pyf=None,tid=None):
       return  
     pyf = load_data(nrun)
   
-  nevts = len(pyf.event_list)
-  #print(nevts,"events in file",datafile)
-  # TBD: access file header
+  if nrun == None:
+    nrun = sys.argv[1]
+  nevts = len(pyf.event_list)  
   for evt in f.event_list:
-  # Loop on all events
-    #print("\n\n!!!New event!!!")
+    # Loop on all events
     for ls in evt.local_station_list:
-    # Loop on all units involved in event (should be one only at this stage)
+      # Loop on all units involved in event (should be one only at this stage of software)
       uid = ls.header.ls_id - 356 # Remove 255 for digits 8-16 in IP adress & 100 for unit ID
-      if tid==None or uid == tid:  
-      # Display 
+      if tid == None or uid == tid:  #  display events for unit tid (or all events from all units if tid == None) 
+        # Access data 
         raw = ls.adc_buffer
         hraw = [hex(int(a)) for a in raw]  # Transfer back to hexadecimal
         draw = [twos_comp(int(a,16), 12) for a in hraw] #2s complements
@@ -415,17 +393,18 @@ def display_events(nrun=None,pyf=None,tid=None):
         #offset = int(nsamples/2.0)  # Offset position at center of waveform
         #print nsamples,"samples per channel --> offset = ",offset
         thisEvent = np.reshape(draw,(4,nsamples));
-        thisEvent = pow(10,(thisEvent+np.min(thisEvent)))
+        thisEvent = pow(10,(thisEvent+np.min(thisEvent)))  # Correct for logarithmic amplification of power detector. Then 
         tmus = np.array(range(nsamples))*20e-3  # Time axis in mus
         evtnb = ls.header.event_nr
         pl.figure(1)
         for i in range(3):
           pl.plot(tmus[3:],thisEvent[i][3:],label=lab[i])
+        # Draw line at expected trigger position
         pl.plot([tmus[int(nsamples/2)+15], tmus[int(nsamples/2)+15]],[np.min(thisEvent[:][:]),np.max(thisEvent[:][:])])
-        pl.title('Evt {0} Antenna {1}'.format(evtnb,uid))
+        pl.title('R{0} Evt{1} Antenna {2}'.format(nrun,evtnb,uid))
         pl.xlim(tmus[3],max(tmus))
         pl.xlabel('Time ($\mu$s)')
-        pl.ylabel('Voltage (V)')
+        pl.ylabel('10$^{Voltage}$')
         pl.legend(loc="best")
         if DISPLAY:
           pl.show()
@@ -434,7 +413,7 @@ def display_events(nrun=None,pyf=None,tid=None):
 
 	
 def load_data(nrun):
-# Loads pyef object
+  # Loads run data into pyef object
   datafile = datafolder+"/R"+nrun+".data.bin"
   if os.path.isfile(datafile) is False:
      print('File ',datafile,'does not exist. \nNow trying MinBias file...')
@@ -456,18 +435,17 @@ if __name__ == '__main__':
        
        #filename = "R{0}_trig_delays.npz".format(sys.argv[1])
        #fitDelays(filename)
-       
-       
+            
        # First load data
        f = load_data(sys.argv[1])
        if f == None:
          sys.exit()
 	 
-       if len(sys.argv)==3:# Display events for BoardID
+       if len(sys.argv)==3:   # BOARDID parameter is present ==> display events
          print('Calling display_events() for unit',sys.argv[2])
          display_events(pyf = f,tid=int(sys.argv[2]))
        
-       # Perform recons
+       # Perform coincidence search
        loadMaxCoarse(sys.argv[1])
        uid,distmat = build_distmat()
        trigtable = get_time(pyf=f)  # 2-lines matrix with [0,:]=UnitIDs and [1,:]=trigtimes

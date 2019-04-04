@@ -1,12 +1,12 @@
 # Script to analyze GP35 slow control data 
 # OMH Aug. 29, 2018
-# Updated Nov 16, on same structure as minBias analysis. Now analysing one board at a time only + reduce info to one txt file.
+# Updated Nov 2018: now same structure as minBias analysis: now analysing one board at a time only + reduce info to one single result txt file.
+# Updated Jan 2019: now reads YAML format for new DAQ.
 
 import os
 from os.path import expanduser
 import time
 import datetime
-#import mx.DateTime
 import sys
 import math
 import numpy as np
@@ -15,29 +15,33 @@ import matplotlib.style
 import matplotlib as mpl
 import yaml
 mpl.style.use('classic')
-
+ULASTAI = 0
 
 def loopSLCRuns(boardID,startrun,endrun):
-  print("Calling loopRuns(). Will analyse minBias for board {0} between R{1} and R{2}.".format(boardID,startrun,endrun))
+  print("Calling loopRuns(). Will reduce SLC data for board {0} between R{1} and R{2}.".format(boardID,startrun,endrun))
   time.sleep(1)
   
   for run in range(int(startrun),int(endrun)+1):
     loopSLCEvents(boardID,run)
     
 def loopSLCEvents(boardID,RUNID):
-   datadir = "/home/martineau/GRAND/GRANDproto35/data/ulastai/"
-   #datadir = "/mnt/disk/"
-   filename = datadir+"S"+str(RUNID)+".yaml"   # To be modified
+   if ULASTAI:
+     datadir = "/mnt/disk/"
+   else:  # Local analysis
+     datadir = "/home/martineau/GRAND/GRANDproto35/data/ulastai/"
+   
+   filename = datadir+"S"+str(RUNID)+".yaml"  
+   print("Calling loopSLCEvents(). Will search SLC data in file {0}".format(filename))
    if os.path.isfile(filename) is False:
      print('File ',filename,'does not exist. Aborting.')
      return
 
-   resfile = 'SLC_b'+boardID+'.txt'  # Output file
+   resfile = 'SLC_b'+boardID+'.txt'  # Result file
    reso = open(resfile,'ab')
    a = np.loadtxt(resfile)
    a = np.loadtxt(resfile)
    try:
-     tfmax =  a[-1,0]   
+     tfmax =  a[-1,0]   # Retrieve most recent time info in result file
    except IndexError:  # When file is empty 
      tfmax = 0
 
@@ -56,9 +60,8 @@ def loopSLCEvents(boardID,RUNID):
    utcsec = []
    time_str = []
    for d in dataf:
-     #determine whether it is a data:
+     # Determine whether it is valid data: SLC format from this specific antenna & more recent than info present in result file
      if d['msg_type']=='SLC':
-       #print(d.keys())
        # Select data from this antenna only      
        uid=(d['source_ip'])[3]-100
        if uid != int(boardID):
@@ -67,12 +70,13 @@ def loopSLCEvents(boardID,RUNID):
        # Select unprocessed data only 
        thisUTC = d['received_timestamp'][0]
        if thisUTC<=tfmax: # Only looking at data more recent than already present in minBias_b[ID].txt
-         print('Older data than in {0}, skiping it.'.format(resfile))
+         print('Older data than in {0}, skipping it.'.format(resfile))
          continue	             
        if len(utcsec)>0 and thisUTC-utcsec[-1]<1:
          #print('Echoed data for unit {0}, skiping it.'.format(uid))
          continue	             
 
+       # Now retrieve data
        utcsec.append(thisUTC)
        IP.append(d['source_ip'])
        power = [d['vpower1'], d['vpower2'],d['vpower3'], d['vpower4'],d['vpower5'], d['vpower6']]
@@ -98,17 +102,19 @@ def loopSLCEvents(boardID,RUNID):
    nev = len(utcsec)
    conc = np.concatenate((utcsec.reshape(nev,1),Temp.reshape(nev,1),VPower.reshape(nev,6),TrigRate.reshape(nev,7),maxCoarse.reshape(nev,1),),axis=1)   # Concatenate results
    conc = conc.reshape(np.size(utcsec),16) # 
-   print("Now writting to file")
+   print("Now writting SLC reduced info to file",resfile,"...")
    np.savetxt(reso,conc,fmt='%3.2f')  # Write to file
-
+   print("Done.")
+   
 def displaySLC(boardID):
    home = expanduser("~")
    #resdir = home+"/GRAND/GRANDproto35/data/ulastai/"
-   resdir = "./"
+   if ULASTAI == 0:
+     resdir = "./"
    resfile = resdir+"SLC_b"+str(boardID)+".txt"
    print("Calling displaySLC(). Will display SLC result file {0}".format(resfile))
    
-   # Load data
+   # Load data from result file
    a = np.loadtxt(resfile)
    utc = a[:,0]
    temp = a[:,1]
@@ -124,6 +130,7 @@ def displaySLC(boardID):
    
    sd,sm,sy=25,11,2018  # Start day,month,year
    ed,em,ey=18,11,2019  # End day,month,year
+   print("Warning: Displaying data for limited time window, hardcoded in displaySLC().")
    startwindow=(datetime.datetime(sy,sm,sd)-datetime.datetime(1970,1,1)).total_seconds()
    endwindow=(datetime.datetime(ey,em,ed)-datetime.datetime(1970,1,1)).total_seconds()
    sel = np.where((utc<endwindow) & (utc> startwindow))
@@ -133,12 +140,11 @@ def displaySLC(boardID):
    trig = trig[sel]
    mCoarse = mCoarse[sel]
 
-   #time = (time-min(time[time>0]))/60
    Triglabel = ['Total','Ch1+','Ch2+','Ch3+','Ch1-','Ch2-','Ch3-']
    Voltlabel = ['Main','-3V','+4V','LNA1','LNA2','LNA3']
-   print('SLC info for board',boardID,' in period:')
+   print(np.shape(sel)[1],'SLC data points available for board',boardID,' corresponding to period:')
    print(datetime.datetime.fromtimestamp(min(utc)).strftime('%y/%m/%d - %H:%M:%S UTC'),' to ',datetime.datetime.fromtimestamp(max(utc)).strftime('%y/%m/%d - %H:%M:%S UTC'))
-   print(np.shape(sel)[1], 'data points for board',boardID)
+   #print(np.shape(sel)[1], 'data points for board',boardID)
    datestart = datetime.datetime.fromtimestamp(min(utc)).strftime('%y/%m/%d %H:%M UTC')
    dateend = datetime.datetime.fromtimestamp(max(utc)).strftime('%y/%m/%d %H:%M UTC')
    print("Actual period displayed: {0}-{1}".format(datestart,dateend))
@@ -193,7 +199,6 @@ def displaySLC(boardID):
    pl.legend(loc='best')
    pl.savefig('trig.png')	
 
-   pl.draw()
    pl.show()
 
    return
@@ -206,6 +211,11 @@ def twos_comp(val, bits):
 
 
 if __name__ == '__main__':
-       loopSLCEvents(sys.argv[1],sys.argv[2])
-       #loopSLCRuns(sys.argv[1],sys.argv[2],sys.argv[3])
-       displaySLC(sys.argv[1])
+       if len(sys.argv) < 2:
+         print("Usage: >anaSLC BOARDID [RUNID(start)] [RUNID(stop)]")
+       if len(sys.argv) == 4:
+         loopSLCRuns(sys.argv[1],sys.argv[2],sys.argv[3])
+       if len(sys.argv) == 3:
+         loopSLCEvents(sys.argv[1],sys.argv[2])
+       if len(sys.argv) == 2:
+         displaySLC(sys.argv[1])  # Display result file
