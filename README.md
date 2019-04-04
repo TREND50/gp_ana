@@ -24,3 +24,13 @@ Computes antenna trigger time expected from reconstructed wave and plots these v
 ### plot_recons(runid)
 Plots various distributions of reconstructed events in run runid.
 
+## [anaSLC.py](https://github.com/TREND50/gp_ana/blob/master/anaSLC.py)
+Script to analyze GP35 slow control data saved in SRunID.yaml files. Main functions are:
+
+### loopSLCEvents(boardID,RUNID):
+Extracts SLC info from unit boardID in file SRunID.yaml, reduce them and saves result into file SLC_bBoardID.txt if they are more recent than latest data stored in that file.
+
+### displaySLC(boardID,RUNID):
+Displays content of SLC_bBoardID.txt file within a time window hardcoded(berk) in the script.
+
+# ToDo
