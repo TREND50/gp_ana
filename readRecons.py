@@ -14,12 +14,16 @@ sigma_t = 15  #ns # Timing error
 pl.ion()
 pl.show()
 
-DISPLAY = 0  # Switch to 1 for additionnal plots
+DISPLAY = 1  # Switch to 1 for additionnal plots
+
+#txtdir = "./testR222_without03/"
+txtdir = "./testR222/"
+txtdir = "./"
 
 def plot_recons(runid):
   
   # Load results of plane wave reconstruction
-  pfile = "R"+runid+"_planerecons_full.txt"
+  pfile = txtdir+"R"+runid+"_planerecons_full.txt"
   if os.path.isfile(pfile) == False: 
     print("No file",pfile,"! Generating it...") # Needed to compute Chi2 of recons
     loop_plot_delays(runid)
@@ -35,6 +39,7 @@ def plot_recons(runid):
   chi2p = a[:,9]
   
   goodChi2p = (chi2p<1000)  # Select valid reconstruction only, set at CHi2<1000
+  print(np.sum(goodChi2p),"valid plane recons out of",len(chi2p))
   th = th[goodChi2p]
   phi = phi[goodChi2p]
   tux = tux[goodChi2p]
@@ -74,7 +79,7 @@ def plot_recons(runid):
   pl.legend(loc='best')
 
   # Load results of spherical reconstruction analysis
-  sfile = "R"+sys.argv[1]+"_sphrecons_full.txt"
+  sfile = txtdir+"R"+sys.argv[1]+"_sphrecons_full.txt"
   if os.path.isfile(sfile) == False: 
     print("No file",sfile,"! Generating it...")
     loop_plot_delays(runid)
@@ -87,11 +92,13 @@ def plot_recons(runid):
   
   # Select sources with valid recons & close to array only
   goodChi2s = (chi2s<1000)
+  print(np.sum(goodChi2s),"valid spherical recons out of",len(chi2s))
   close = (np.abs(xs)<1e4) & (np.abs(ys)<1e4)
   xsc = xs[close & goodChi2s]
   ysc = ys[close & goodChi2s]
   zsc = zs[close & goodChi2s]
   mult = mult[close & goodChi2s]
+  print(np.sum([close & goodChi2s]),"close and valid spherical recons out of",len(chi2s))
   mults = np.unique(mult)
 
   # Plot
@@ -121,21 +128,28 @@ def plot_recons(runid):
   # Add antenna layout to plot
   plotArray()
 
+  pl.figure(4)
+  pl.subplot(211)
+  pl.hist(np.log10(chi2p+1),200)
+  pl.xlabel('log10($\chi^2$ plane)')
+  pl.subplot(212)
+  pl.hist(np.log10(chi2s+1),200)
+  pl.xlabel('log10($\chi^2$ sph)')
   # TBD: plot of Chi2 as a function of unit ID in event, in order to spot antenna with bad timing or bad position
   
 def loop_plot_delays(runid):
   # Loop on all reconstructed coinc and call plot_delays in order to compute Chi2
   
   # First load ALL txt infos
-  cfile = "R"+runid+"_coinctable.txt"
+  cfile = txtdir+"R"+runid+"_coinctable.txt"
   c = np.loadtxt(cfile)
   ccoincids = c[:,3]
   
-  sfile = "R"+sys.argv[1]+"_sphrecons.txt"
+  sfile = txtdir+"R"+sys.argv[1]+"_sphrecons.txt"
   s = np.loadtxt(sfile)
   scoincids = s[:,0]
   
-  pfile = "R"+sys.argv[1]+"_planerecons.txt"
+  pfile = txtdir+"R"+sys.argv[1]+"_planerecons.txt"
   p = np.loadtxt(pfile)
   pcoincids = p[:,0]
   chi2ini = p[:,8]
@@ -190,7 +204,7 @@ def plot_delays(runid, coincid, exp_delays = None, rec_source = None, rec_dir = 
     print("Processing recons",coincid," in run",runid)
     coincid = int(coincid)
     # Exp delays 
-    cfile = "R"+runid+"_coinctable.txt"
+    cfile = txtdir+"R"+runid+"_coinctable.txt"
     c = np.loadtxt(cfile)
     coincids = c[:,3]
     ind = np.argwhere(coincids==coincid)
@@ -214,7 +228,7 @@ def plot_delays(runid, coincid, exp_delays = None, rec_source = None, rec_dir = 
     
   # Load sph recons if not in argument  
   if rec_source is None:
-    sfile = "R"+str(runid)+"_sphrecons.txt"
+    sfile = txtdir+"R"+str(runid)+"_sphrecons.txt"
     a = np.loadtxt(sfile)
     coincids = a[:,0]
     ind = np.argwhere(coincids == coincid)[0]
@@ -231,7 +245,7 @@ def plot_delays(runid, coincid, exp_delays = None, rec_source = None, rec_dir = 
     
   # Load plane recons if not in argument  
   if rec_dir is None:
-    pfile = "R"+str(runid)+"_planerecons.txt"
+    pfile = txtdir+"R"+str(runid)+"_planerecons.txt"
     a = np.loadtxt(pfile)
     coincids = a[:,0]
     ind = np.argwhere(coincids == coincid)[0]
@@ -254,8 +268,10 @@ def plot_delays(runid, coincid, exp_delays = None, rec_source = None, rec_dir = 
   chi2pndf = chi2p/ndf  
   
   # Display
-  if DISPLAY: 
-    #and len(ants)>5:
+  if DISPLAY and len(ants)>7:
+  # and len(ants)>4 and chi2sndf>100:
+  # and exp_delays[0]==103:
+  # and len(ants)>4 and chi2sndf>100:
     print("Coinc",coincid,"R",runid,":")
     print("Experimental delays:",exp_delays)
     print("Reconstructed delays:",recs_delays)
@@ -278,7 +294,7 @@ def plot_delays(runid, coincid, exp_delays = None, rec_source = None, rec_dir = 
       pl.text(exp_delays[i]+100,recp_delays[i],str(int(ants[i])))
     textmax = max(max(exp_delays),max(recp_delays))
     pl.text(0,textmax*0.95,"($\Theta$,$\phi$)=({0},{1}) deg".format(round(rec_dir[0],1),round(rec_dir[1],1)))
-    pl.text(0,textmax*0.9,"$\chi2$/ndf = {0}".format(round(chi2pndf),1))
+    pl.text(0,textmax*0.9,"$\chi^2$/ndf = {0}".format(round(chi2pndf),1))
  
     pl.subplot(1,2,2)
     pl.plot(exp_delays,recs_delays,'sk')
@@ -290,7 +306,7 @@ def plot_delays(runid, coincid, exp_delays = None, rec_source = None, rec_dir = 
       pl.text(exp_delays[i]+100,recs_delays[i],str(int(ants[i])))
     textmax = max(max(exp_delays),max(recs_delays))
     pl.text(0,textmax*0.95,"Source position=({0},{1},{2})m".format(round(rec_source[0],1),round(rec_source[1],1),round(rec_source[2],2)))
-    pl.text(0,textmax*0.9,"Chi2/ndf = {0}".format(round(chi2sndf,1)))
+    pl.text(0,textmax*0.9,"$\chi^2$/ndf = {0}".format(round(chi2sndf,1)))
     pl.title("Spherical recons")
     pl.suptitle('Coinc {0} R{1}'.format(coincid,runid))
  
@@ -299,7 +315,7 @@ def plot_delays(runid, coincid, exp_delays = None, rec_source = None, rec_dir = 
   return chi2sndf, chi2pndf
     
 if __name__ == '__main__':
-  #loop_plot_delays(sys.argv[1])
+  loop_plot_delays(sys.argv[1])
   if len(sys.argv)==3:
     plot_delays(sys.argv[1],sys.argv[2])
   

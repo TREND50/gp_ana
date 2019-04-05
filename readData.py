@@ -183,7 +183,7 @@ def build_coincs(trigtable,uid,d):
   pl.xlabel('Trigger delay (ns)')
   pl.savefig('delays_R{0}'.format(sys.argv[1]))
   filename = "R{0}_trig_delays.npz".format(nrun)
-  np.savez("trig_delays",delays,uid_delays)  # Write delay histogram to file for faster access for further work on this distribution (see fitDelays())
+  np.savez("R{0}_trig_delays".format(nrun),delays,uid_delays)  # Write delay histogram to file for faster access for further work on this distribution (see fitDelays())
   
   if DISPLAY:
     pl.show()
@@ -211,7 +211,7 @@ def fitDelays(filename):
           #pl.plot(bc, h, label='ID{0}'.format(int(i)))
           pl.plot(bc, h_fit)
           print('Unit',int(i),': mean trig delay',coeff[1],'ns latter than 1st trigger')
-          print('Trigger time dispertion = ', coeff[2]/np.sqrt(2),'ns')
+          print('Trigger time dispersion = ', coeff[2]/np.sqrt(2),'ns')
     
   pl.xlim([0,6000])
   pl.legend(loc='best')
