@@ -19,7 +19,7 @@ Looks for causal coincidences between antennas (defined as Delta_trig < Delta_Po
 Script to plot the results of spherical and plane reconstructions using files RRunId_planerecons.txt & RRunId_sphrecons.txt produced with the [```gp_recons```](https://github.com/TREND50/gp_recons) software. Main functions are:
 
 ### plot_delays(runid, coincid,...)
-Computes antenna trigger times expected from reconstructed wave and plots these vs measured ones fro coincidence coincid in run runid. Computes associated Chi2. Perfect reconstruction should correspond to distribution along 1st bissector and Chi2 = 0. Read [TREND 2011 paper](https://arxiv.org/abs/1007.4359) for more details (see Fig 6 in particular).
+Computes antenna trigger times expected from reconstructed wave and plots these vs measured ones fro coincidence coincid in run runid. Computes associated Chi2. Perfect reconstruction should correspond to distribution along 1st bissector and Chi2 = 0. Read [TREND 2011 paper](https://arxiv.org/abs/1007.4359) for more details (see Fig. 6 in particular).
 
 ### plot_recons(runid)
 Plots various distributions of reconstructed events in run runid.
@@ -31,6 +31,7 @@ Script to analyze GP35 slow control data saved in SRunID.yaml files. Main functi
 Extracts SLC info from unit boardID in file SRunID.yaml, reduce them and saves result into file SLC_bBoardID.txt if they are more recent than latest data stored in that file.
 
 ### displaySLC(boardID,RUNID):
-Displays content of SLC_bBoardID.txt file within a time window hardcoded(berk) in the script.
+Displays content of SLC_bBoardID.txt results file within a time window hardcoded (berk) in the script.
 
 # ToDo
+- Develop statistical analysis of time pulses: mean of baseline, std of baseline, amplitude distributio,, distribution of trigger time positions are interesting variables?. This could be based on loopEvents() function in (obsolete) (script GRANDproto_python/anaData.py](https://github.com/TREND50/GRANDproto_python/blob/master/anaData.py). 
