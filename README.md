@@ -7,7 +7,7 @@ Relevant tools are available within 3 scripts at present:
 Script to read GP35 data produced by the RUST DAQ software and manipulate it. Relies on [```pyef```](https://github.com/TREND50/pyef) package to access data. Main functions are:
 
 ### display_events():
-Loads data and displays timetraces 
+Loads data and displays timetraces. Note that in the present version the value plotted is 10^(signal) to correct for teh logarithmic amplification of the Power Detector present in the analog chain of the Electronic Board (see [the GRAND manual](https://github.com/TREND50/GRANDproto_manual/blob/master/manual.pdf) for details).   
 
 ### get_time():
 Loads data, build trig time info and orders it in increasing order.
