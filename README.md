@@ -15,7 +15,7 @@ Loads data, build trig time info and orders it in increasing order.
 ### build_coincs():
 Looks for causal coincidences between antennas (defined as Delta_trig < Delta_Pos/c0) and save these coincident events to file RRunId_coinctable.txt, to be used for source reconstruction (see [```gp_recons```](https://github.com/TREND50/gp_recons) for details).
 
-## [reaRecons.py](https://github.com/TREND50/gp_ana/blob/master/readRecons.py)
+## [readRecons.py](https://github.com/TREND50/gp_ana/blob/master/readRecons.py)
 Script to plot the results of spherical and plane reconstructions using files RRunId_planerecons.txt & RRunId_sphrecons.txt produced with the [```gp_recons```](https://github.com/TREND50/gp_recons) software. Main functions are:
 
 ### plot_delays(runid, coincid,...)
@@ -35,3 +35,5 @@ Displays content of SLC_bBoardID.txt results file within a time window hardcoded
 
 # ToDo
 - Develop statistical analysis of time pulses: mean of baseline, std of baseline, amplitude distributio,, distribution of trigger time positions are interesting variables. This could be based on loopEvents() function in (obsolete) (script [GRANDproto_python/anaData.py](https://github.com/TREND50/GRANDproto_python/blob/master/anaData.py). Additionnaly, the rate of transient signals with random triggers, as well as the corresponding trigger positions, should be studied. See item 4.1.6 in [the GRAND manual](https://github.com/TREND50/GRANDproto_manual/blob/master/manual.pdf) for details on random data.
+- Optimise coincidence search by using "true" distance between detection units (i,j) instead of max(Distance) as done presently (see line #118 in [readData.py](https://github.com/TREND50/gp_ana/blob/master/readData.py).
+- Study distribution of Chi2 as a function of unit ID in [readRecons.py](https://github.com/TREND50/gp_ana/blob/master/readRecons.py) inordre to identify possible offsets in time tag and/or antenna position. This will require fetching infos from RRunID_coinctable.txt on unit IDs participating in a given coincidence. 
