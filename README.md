@@ -19,7 +19,7 @@ Looks for causal coincidences between antennas (defined as Delta_trig < Delta_Po
 Script to plot the results of spherical and plane reconstructions using files RRunId_planerecons.txt & RRunId_sphrecons.txt produced with the [```gp_recons```](https://github.com/TREND50/gp_recons) software. Main functions are:
 
 ### plot_delays(runid, coincid,...)
-Computes antenna trigger times expected from reconstructed wave and plots these vs measured ones fro coincidence coincid in run runid. Computes associated Chi2. Perfect reconstruction should correspond to distribution along 1st bissector and Chi2 = 0. Read [TREND 2011 paper](https://arxiv.org/abs/1007.4359) for more details (see Fig. 6 in particular).
+Computes antenna trigger times expected from reconstructed wave and plots these vs measured ones for coincidence coincid in run runid. Computes associated Chi2. Perfect reconstruction should correspond to distribution along 1st bissector and Chi2 = 0. Read [TREND 2011 paper](https://arxiv.org/abs/1007.4359) for more details (see Fig. 6 in particular).
 
 ### plot_recons(runid)
 Plots various distributions of reconstructed events in run runid.
@@ -34,7 +34,7 @@ Extracts SLC info from unit boardID in file SRunID.yaml, reduce them and saves r
 Displays content of SLC_bBoardID.txt results file within a time window hardcoded (berk) in the script.
 
 # ToDo
-- Develop statistical analysis of time pulses: mean of baseline, std of baseline, amplitude distributio,, distribution of trigger time positions are interesting variables. This could be based on loopEvents() function in (obsolete) (script [GRANDproto_python/anaData.py](https://github.com/TREND50/GRANDproto_python/blob/master/anaData.py). Additionnaly, the rate of transient signals with random triggers, as well as the corresponding trigger positions, should be studied. See item 4.1.6 in [the GRAND manual](https://github.com/TREND50/GRANDproto_manual/blob/master/manual.pdf) for details on random data.
+- Develop statistical analysis of time pulses: mean of baseline, std of baseline, amplitude distribution, distribution of trigger time positions are interesting variables. This could be based on loopEvents() function in (obsolete) (script [GRANDproto_python/anaData.py](https://github.com/TREND50/GRANDproto_python/blob/master/anaData.py). Additionnaly, the rate of transient signals with random triggers, as well as the corresponding trigger positions, should be studied. See item 4.1.6 in [the GRAND manual](https://github.com/TREND50/GRANDproto_manual/blob/master/manual.pdf) for details on random data.
 - Optimise coincidence search by using "true" distance between detection units (i,j) instead of max(Distance) as done presently (see line #118 in [readData.py](https://github.com/TREND50/gp_ana/blob/master/readData.py).
 - Study distribution of Chi2 as a function of unit ID in [readRecons.py](https://github.com/TREND50/gp_ana/blob/master/readRecons.py) in order to identify possible offsets in time tag and/or antenna position. This will require fetching from RRunID_coinctable.txt the exact list of unit IDs participating in a given coincidence. 
 - Set up a mechanism to check if trig time info is indeed present in each event and flag antennas without such info.
