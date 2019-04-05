@@ -34,4 +34,4 @@ Extracts SLC info from unit boardID in file SRunID.yaml, reduce them and saves r
 Displays content of SLC_bBoardID.txt results file within a time window hardcoded (berk) in the script.
 
 # ToDo
-- Develop statistical analysis of time pulses: mean of baseline, std of baseline, amplitude distributio,, distribution of trigger time positions are interesting variables?. This could be based on loopEvents() function in (obsolete) (script GRANDproto_python/anaData.py](https://github.com/TREND50/GRANDproto_python/blob/master/anaData.py). 
+- Develop statistical analysis of time pulses: mean of baseline, std of baseline, amplitude distributio,, distribution of trigger time positions are interesting variables. This could be based on loopEvents() function in (obsolete) (script [GRANDproto_python/anaData.py](https://github.com/TREND50/GRANDproto_python/blob/master/anaData.py). Additionnaly, the rate of transient signals with random triggers, as well as the corresponding trigger positions, should be studied. See item 4.1.6 in [the GRAND manual](https://github.com/TREND50/GRANDproto_manual/blob/master/manual.pdf) for details on random data.
