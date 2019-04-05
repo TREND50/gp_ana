@@ -38,4 +38,4 @@ Displays content of SLC_bBoardID.txt results file within a time window hardcoded
 - Optimise coincidence search by using "true" distance between detection units (i,j) instead of max(Distance) as done presently (see line #118 in [readData.py](https://github.com/TREND50/gp_ana/blob/master/readData.py).
 - Study distribution of Chi2 as a function of unit ID in [readRecons.py](https://github.com/TREND50/gp_ana/blob/master/readRecons.py) in order to identify possible offsets in time tag and/or antenna position. This will require fetching from RRunID_coinctable.txt the exact list of unit IDs participating in a given coincidence. 
 - Set up a mechanism to check if trig time info is indeed present in each event (flag antennas without GPS signal).
-- Implement calibration analysis (could be based on (obsolete) script [GRANDproto_python/anaCalib.py](https://github.com/TREND50/GRANDproto_python/blob/master/anaCalib.py).
+- Implement calibration analysis. Could be based on (obsolete) script [GRANDproto_python/anaCalib.py](https://github.com/TREND50/GRANDproto_python/blob/master/anaCalib.py).
