@@ -25,6 +25,7 @@ def loopSLCRuns(boardID,startrun,endrun):
     loopSLCEvents(boardID,run)
     
 def loopSLCEvents(boardID,RUNID):
+# Analysing one single run
    if ULASTAI:
      datadir = "/mnt/disk/"
    else:  # Local analysis
@@ -69,9 +70,6 @@ def loopSLCEvents(boardID,RUNID):
          continue
        # Select unprocessed data only 
        thisUTC = d['received_timestamp'][0]
-       if thisUTC<=tfmax: # Only looking at data more recent than already present in minBias_b[ID].txt
-         print('Older data than in {0}, skipping it.'.format(resfile))
-         continue	             
        if len(utcsec)>0 and thisUTC-utcsec[-1]<1:
          #print('Echoed data for unit {0}, skiping it.'.format(uid))
          continue	             
@@ -88,13 +86,27 @@ def loopSLCEvents(boardID,RUNID):
        TrigRate.append(trate)
        maxCoarse.append(d['max_coarse'])
        time_str.append(d['received_timestamp_str'])
-       print(d['received_timestamp_str'])
+       print('Data retrieved at time stamp',d['received_timestamp_str'])
              
-	      
+	         
    # Write to file
    IP = np.asarray(IP,dtype=int)
    utcsec = np.asarray(utcsec,dtype=int)
+   time = utcsec - min(utcsec)
    TrigRate = np.asarray(TrigRate,dtype=float)
+   nmes = np.shape(TrigRate)[0]  # Nb of measurements
+   pl.figure(1)
+   labs = ['Total','X-','X+','Y-','Y+','Z-','Z+']
+   pl.plot(time,TrigRate[:,0],label=labs[0])
+   for i in range(1,7):
+      pl.plot(time,TrigRate[:,i],'--',label=labs[i])
+   pl.xlim([0,max(time)])
+   pl.legend(loc='best')
+   pl.xlabel('Time (s)')
+   pl.ylabel('Trigger rate (Hz)')
+   pl.title('Detection unit {0}'.format(boardID))
+   pl.show()
+   
    Th = np.asarray(Th,dtype=float)
    Temp = np.asarray(Temp,dtype=float)
    VPower = np.asarray(VPower,dtype=float)
@@ -102,9 +114,13 @@ def loopSLCEvents(boardID,RUNID):
    nev = len(utcsec)
    conc = np.concatenate((utcsec.reshape(nev,1),Temp.reshape(nev,1),VPower.reshape(nev,6),TrigRate.reshape(nev,7),maxCoarse.reshape(nev,1),),axis=1)   # Concatenate results
    conc = conc.reshape(np.size(utcsec),16) # 
-   print("Now writting SLC reduced info to file",resfile,"...")
-   np.savetxt(reso,conc,fmt='%3.2f')  # Write to file
-   print("Done.")
+   if thisUTC<=tfmax: # Only looking at data more recent than already present in minBias_b[ID].txt
+     print('Older data than in {0}, not writing to file.'.format(resfile))
+     return 
+   else:
+     print("Now writting SLC reduced info to file",resfile,"...")
+     np.savetxt(reso,conc,fmt='%3.2f')  # Write to file
+     print("Done.")
    
 def displaySLC(boardID):
    home = expanduser("~")
@@ -152,8 +168,8 @@ def displaySLC(boardID):
    # Time ticks
    nticks = 8
    ind = np.linspace(min(utc),max(utc),nticks)
-   #date = [datetime.datetime.fromtimestamp(ux).strftime('%H:%M') for ux in ind]
-   date = [datetime.datetime.fromtimestamp(ux).strftime('%m/%d') for ux in ind]
+   date = [datetime.datetime.fromtimestamp(ux).strftime('%H:%M') for ux in ind]
+   #date = [datetime.datetime.fromtimestamp(ux).strftime('%m/%d') for ux in ind]
    
    # Temperature plot
    pl.figure(1)
@@ -162,8 +178,8 @@ def displaySLC(boardID):
    pl.xlim(min(utc)-1,max(utc)+1)
    pl.grid(True)
    pl.legend(loc='best')
-   pl.xlabel('Date [Month/Day]',size='large')
-   #pl.xlabel('Time')
+   #pl.xlabel('Date [Month/Day]',size='large')
+   pl.xlabel('Time')
    pl.ylabel('Temperature ($^{\circ}$C)')
    pl.title('Board temperature')
    pl.savefig('temp.png')	
