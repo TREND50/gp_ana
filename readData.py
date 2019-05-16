@@ -16,6 +16,7 @@ import pylab as pl
 import yaml
 import scipy
 from scipy.optimize import curve_fit
+from tools import getPos
 
 DISPLAY = 0  # Switch to 1 for additionnal plots
 ULASTAI = 0
@@ -90,15 +91,8 @@ def getMaxCoarse(uid,utcsec):
 
 def build_distmat():
   # Build matrix of d(ant1,ant2)
-  antfile = "ants.txt"
-  pos = np.loadtxt(antfile,delimiter=',')
-  a = np.array([('a', 2), ('c', 1)], dtype=[('x', 'S1'), ('y', int)])
-  uid=pos[:,0]
+  uid,x,y,z = getPos()
   nants = len(uid)
-  x=pos[:,2]
-  y=pos[:,1]
-  z=pos[:,3]
-  #p = [x, y, z]  # Why cannot numpy build matrixes with this syntax?????????? Makes me crazy
   p = np.vstack((x,y,z))
   d = np.ndarray(shape=(nants,nants))
   for i in range(nants):
@@ -110,14 +104,14 @@ def build_distmat():
   return uid,d
 
 
-def build_coincs(trigtable,uid,d):
+def build_coincs(trigtable,d):
   # Search for coincs
   nrun = sys.argv[1]
   print("Now searching for coincidences...")
   ntrigs = np.shape(trigtable)[0]
   tmax = np.max(d)/c0*1e9*1.1  # Factor 1.1 to give some flexibility
   # TBD: adjust tmax for each pair of antennas
-  uid = trigtable[:,0]  # Vector of unit UDs
+  uid = trigtable[:,0]  # Vector of unit IDs
   secs = trigtable[:,1]  # Vector of seconds info
   secscor = secs-min(secs)  #  Use first second as reference. Otherwise "times" field is too long and subsequent operations fail...
   nsecs = trigtable[:,2] # Vector of nanoseconds info
@@ -171,7 +165,11 @@ def build_coincs(trigtable,uid,d):
     else:
       i = i+1
 
-  np.savetxt(filename,all_coincs,fmt='%d')  # Write to file
+  if coinc_nb>0:
+    np.savetxt(filename,all_coincs,fmt='%d')  # Write to file
+  else:
+    print('No coinc found. Exiting')
+    sys.exit()
 
   uid_delays = np.array(uid_delays)
   uid = np.unique(uid_delays)
@@ -259,7 +257,7 @@ def get_time(nrun=None,pyf=None):
     #  continue
 
     if uid == 20:  # Dirty trick to exclude one antenna from analysis
-        #  print("Skipping unit 03")
+        #  print("Skipping unit 20")
         continue
     IDs.append(uid)
     h = evt.header
@@ -321,56 +319,56 @@ def get_time(nrun=None,pyf=None):
         print("***Warning! Jump in past for unit",uid,"from SSS =",secs[IDs==uid][i],"to SSS =",secs[IDs==uid][i+1])
 
   # Plot a few graphs to check run quality
-  pl.figure(1)
-  pl.subplot(211)
-  for uid in units:
-    pl.plot(nsecs[IDs==uid],label=uid)
-  pl.xlabel('Event nb')
-  pl.ylabel('Nanosec counter value')
-  pl.legend(loc='best')
-  pl.subplot(212)
-  for uid in units:
-    pl.hist(nsecs[IDs==uid],100,label=uid)
-  pl.xlabel('Nanosec counter value')
-  pl.xlim([0,1e9])
-  pl.legend(loc='best')
+  if 0:
+      pl.figure(1)
+      pl.subplot(211)
+      for uid in units:
+        pl.plot(nsecs[IDs==uid],label=uid)
+      pl.xlabel('Event nb')
+      pl.ylabel('Nanosec counter value')
+      pl.legend(loc='best')
+      pl.subplot(212)
+      for uid in units:
+        pl.hist(nsecs[IDs==uid],100,label=uid)
+      pl.xlabel('Nanosec counter value')
+      pl.xlim([0,1e9])
+      pl.legend(loc='best')
 
-  pl.figure(2)
-  for uid in units:
-    pl.plot(ttimes[IDs==uid],label=uid)
-  pl.xlabel('Event nb')
-  pl.ylabel('Trigger time (s)')
-  pl.legend(loc='best')
-  pl.title('Event rate')
-  pl.savefig('EventRate_R{0}'.format(sys.argv[1]))
+      pl.figure(2)
+      for uid in units:
+        pl.plot(ttimes[IDs==uid],label=uid)
+      pl.xlabel('Event nb')
+      pl.ylabel('Trigger time (s)')
+      pl.legend(loc='best')
+      pl.title('Event rate')
+      pl.savefig('EventRate_R{0}'.format(sys.argv[1]))
 
-  pl.figure(3)
-  pl.hist(IDs,100)
-  pl.xlabel("Unit ID")
-  pl.ylabel("Nb of events")
-  pl.savefig('NbEvents_R{0}'.format(sys.argv[1]))
+      pl.figure(3)
+      pl.hist(IDs,100)
+      pl.xlabel("Unit ID")
+      pl.ylabel("Nb of events")
+      pl.savefig('NbEvents_R{0}'.format(sys.argv[1]))
 
-  for uid in units:
-    pl.figure(uid*100)
-    delta_trig = np.diff(ttimes[IDs==uid])*1000 # in ms
-    pl.hist(delta_trig[ (delta_trig<200) & (delta_trig>0)],1000)
-    pl.title('Unit {0}'.format(uid))
-    pl.xlabel("$\Delta$t trig (ms)")
+      for uid in units:
+        pl.figure(uid*100)
+        delta_trig = np.diff(ttimes[IDs==uid])*1000 # in ms
+        pl.hist(delta_trig[ (delta_trig<200) & (delta_trig>0)],1000)
+        pl.title('Unit {0}'.format(uid))
+        pl.xlabel("$\Delta$t trig (ms)")
 
-  dur = max(ttimes)
-  print(nevts,"events in run",nrun)
-  print("Run duration:",dur,"seconds.")
-  print("Units present in run:")
-  for uid in units:
-    print("Unit",uid,":",np.shape(np.where(IDs==uid))[1],"events.")
-  input()
+      dur = max(ttimes)
+      print(nevts,"events in run",nrun)
+      print("Run duration:",dur,"seconds.")
+      print("Units present in run:")
+      for uid in units:
+        print("Unit",uid,":",np.shape(np.where(IDs==uid))[1],"events.")
+      input()
 
-  if DISPLAY:
-    pl.show()
+      if DISPLAY:
+        pl.show()
 
   # Format: ID sec nsec (ordered by increasing time)
   return res
-
 
 
 def display_events(nrun=None,pyf=None,typ="R",tid=None):
@@ -535,6 +533,7 @@ if __name__ == '__main__':
 
        #filename = "R{0}_trig_delays.npz".format(sys.argv[1])
        #fitDelays(filename)
+       uid,distmat = build_distmat()
 
        # First load data
        if len(sys.argv)>2:
@@ -553,4 +552,4 @@ if __name__ == '__main__':
        loadMaxCoarse(sys.argv[1])
        uid,distmat = build_distmat()
        trigtable = get_time(pyf=f)  # 2-lines matrix with [0,:]=UnitIDs and [1,:]=trigtimes
-       #build_coincs(trigtable,uid,distmat)
+       build_coincs(trigtable,distmat)
