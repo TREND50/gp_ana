@@ -456,7 +456,7 @@ def display_events(nrun=None,pyf=None,typ="R",tid=None):
   mub = np.array(mub)
   sigb = np.array(sigb)
   for k in range(nCh):
-      if 1:
+      if typ=="R":
           good = np.sum( (imax[:,k]>104) & (imax[:,k]<108))
           abline = np.sum( (Amax[:,k]<0))
           azero = np.sum( (Amax[:,k]==0))
@@ -498,8 +498,12 @@ def display_events(nrun=None,pyf=None,typ="R",tid=None):
       #pl.title('Board {0}'.format(tid))
       pl.grid(True)
 
-      print('Channel',k,': Peak @ ',np.mean((Amax[:,k][0])),'V, std dev=',np.std((Amax[:,k])),'V, rel error=',np.std((Amax[:,k]))/np.mean((Amax[:,k]))*100,'%')
-      print('Channel',k,': Peak - bline @ ',np.mean((diffAmp)),'V, std dev=',np.std((diffAmp)),'V, rel error=',np.std((diffAmp))/np.mean((diffAmp))*100,'%')
+      print('Channel',k,': bline @ ',np.mean((mub[:,k])),'V, std dev=',np.mean((sigb[:,k])),'V')
+      #, rel error=',np.mean((Amax[:,k]))/np.mean((Amax[:,k]))*100,'%')
+      print('Channel',k,': Peak @ ',np.mean((Amax[:,k])),'V, std dev=',np.std((Amax[:,k])),'V')
+      #, rel error=',np.std((Amax[:,k]))/np.mean((Amax[:,k]))*100,'%')
+      #print('Channel',k,': Peak - bline @ ',np.mean((diffAmp)),'V, std dev=',np.std((diffAmp)),'V')
+      #, rel error=',np.std((diffAmp))/np.mean((diffAmp))*100,'%')
 
       pl.subplot(233)
       pl.plot(mub[:,k],sigb[:,k],'+')
@@ -507,8 +511,9 @@ def display_events(nrun=None,pyf=None,typ="R",tid=None):
       pl.ylabel('Bline std dev')
       #pl.title('Board {0}'.format(tid))
       pl.grid(True)
+      res = [np.mean((mub[:,k])),np.mean((sigb[:,k]))]
 
-  print("Done. If no event was displayed,then this means that there was no event recorded for unit",tid,"in run",nrun,".")
+  print("Done. If nothing was displayed,then this means that there was no event recorded for unit",tid,"in run",nrun,".")
 
 def load_data(nrun,typ="R"):
   # Loads run data into pyef object
