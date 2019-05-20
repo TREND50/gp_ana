@@ -4,8 +4,6 @@
 
 # OMH January 2019
 
-
-
 import os
 import sys
 sys.path.append("../")
@@ -17,8 +15,9 @@ import yaml
 import scipy
 from scipy.optimize import curve_fit
 from tools import getPos
+from scipy.optimize import curve_fit
 
-DISPLAY = 0  # Switch to 1 for additionnal plots
+DISPLAY = 1  # Switch to 1 for additionnal plots
 ULASTAI = 0
 if ULASTAI:
   datafolder = "/mnt/disk"
@@ -414,33 +413,71 @@ def display_events(nrun=None,pyf=None,typ="R",tid=None):
         #offset = int(nsamples/2.0)  # Offset position at center of waveform
         #print nsamples,"samples per channel --> offset = ",offset
         thisEvent = np.reshape(draw,(4,nsamples));
-        thisEvent = pow(10,(thisEvent+np.min(thisEvent)))  # Correct for logarithmic amplification of power detector. Then
+        thisEventExp = pow(10,(thisEvent+np.min(thisEvent)))  # Correct for logarithmic amplification of power detector. Then
 
+        # Fit calibration signal with sine wave
+        if typ == "C":
+            tmus = np.array(range(nsamples))*20e-3  # Time axis in
+            xr = tmus[3:]  #mus
+            w = 2*np.pi*66.666666  #rad/mus
+            yr = thisEvent[3][3:]
+            fitfunc = lambda xr, a, b, c: a*np.sin(w*xr+b)+c   # Create fit function
+            abeg = float(np.max(yr)-np.min(yr))
+            p, pcov = curve_fit(fitfunc,xr,yr,p0 = [abeg,0.0,0.0])  #Perform fit
 
         if DISPLAY:
-            pl.figure(1)
+            pl.figure(j)
             tmus = np.array(range(nsamples))*20e-3  # Time axis in µs
             evtnb = ls.header.event_nr
-            for i in range(nCh):
+            for i in range(3):
+                pl.subplot(121)
                 pl.plot(tmus[3:],thisEvent[i][3:],label=lab[i])
-                # Draw line at expected trigger position
-                #pl.plot([tmus[int(nsamples/2)+15], tmus[int(nsamples/2)+15]],[np.min(thisEvent[:][:]),np.max(thisEvent[:][:])])
-                pl.title('R{0} Evt{1} Antenna {2}'.format(nrun,evtnb,uid))
                 pl.xlim(tmus[3],max(tmus))
                 pl.xlabel('Time ($\mu$s)')
-                pl.ylabel('10$^{Voltage}$')
+                if typ == "P":
+                   pl.ylabel('LSB')
+                else:
+                   pl.ylabel('ADC voltage')
                 pl.legend(loc="best")
+                pl.grid(True)
+                pl.subplot(122)
+                pl.plot(tmus[3:],thisEventExp[i][3:],label=lab[i])
+                pl.xlim(tmus[3],max(tmus))
+                pl.xlabel('Time ($\mu$s)')
+                if typ == "P":
+                   pl.ylabel('LSB')
+                else:
+                   pl.ylabel('10$^{Voltage}$')
+                pl.legend(loc="best")
+                pl.grid(True)
+                pl.suptitle("Run {0} Unit {1} Event {2}".format(nrun,tid,evtnb))
+
+            if typ == "C":  # Plotting calibrator signal in Calibration mode
+                pl.figure(j*10)
+                pl.plot(tmus[3:],thisEvent[3][3:],'s')
+                print('Fit results:',p,np.sqrt(np.diag(pcov)))
+                xf=np.linspace(xr[0],xr[-1],10000)  # Display fit result wuith nice thinning
+                pl.plot(xf,fitfunc(xf,p[0],p[1],p[2]))
+                pl.xlim(tmus[3],max(tmus))
+                pl.xlabel('Time ($\mu$s)')
+                pl.ylabel('ADC voltage')
             pl.show()
             input()
             pl.close('all')
 
         # Build stats
         imub,isigb,iimax,iAmax = np.zeros((nCh,1)),np.zeros((nCh,1)),np.zeros((nCh,1)),np.zeros((nCh,1))
-        for i in range(nCh):
+        for i in range(3):
           imub[i] = np.mean(thisEvent[i][win])  # Restrict to baseline
           isigb[i] = np.std(thisEvent[i][win]) # Restrict to baseline
           iimax[i] = int(np.argmax(thisEvent[i][3:])+3)
           iAmax[i] = thisEvent[i][int(iimax[i])]
+
+        if typ == "C":
+          imub[3] = p[2]  # Use fit info
+          isigb[3] = np.std(thisEvent[i][win]) # Restrict to baseline
+          iimax[3] = int(np.argmax(thisEvent[i][3:])+3)
+          iAmax[3] = abs(p[0])
 
         #print(imub,isigb,iimax,iAmax)
         imax.append(iimax)
@@ -453,6 +490,9 @@ def display_events(nrun=None,pyf=None,typ="R",tid=None):
   Amax = np.array(Amax)
   mub = np.array(mub)
   sigb = np.array(sigb)
+  if len(Amax) == 0:
+      sys.exit("No signal on unit {0} in run {1}.".format(tid,nrun))
+
   for k in range(nCh):
       if typ=="R":
           good = np.sum( (imax[:,k]>104) & (imax[:,k]<108))
@@ -496,13 +536,6 @@ def display_events(nrun=None,pyf=None,typ="R",tid=None):
       #pl.title('Board {0}'.format(tid))
       pl.grid(True)
 
-      print('Channel',k,': bline @ ',np.mean((mub[:,k])),'V, std dev=',np.mean((sigb[:,k])),'V')
-      #, rel error=',np.mean((Amax[:,k]))/np.mean((Amax[:,k]))*100,'%')
-      print('Channel',k,': Peak @ ',np.mean((Amax[:,k])),'V, std dev=',np.std((Amax[:,k])),'V')
-      #, rel error=',np.std((Amax[:,k]))/np.mean((Amax[:,k]))*100,'%')
-      #print('Channel',k,': Peak - bline @ ',np.mean((diffAmp)),'V, std dev=',np.std((diffAmp)),'V')
-      #, rel error=',np.std((diffAmp))/np.mean((diffAmp))*100,'%')
-
       pl.subplot(233)
       pl.plot(mub[:,k],sigb[:,k],'+')
       pl.xlabel('Baseline mean')
@@ -511,7 +544,28 @@ def display_events(nrun=None,pyf=None,typ="R",tid=None):
       pl.grid(True)
       res = [np.mean((mub[:,k])),np.mean((sigb[:,k]))]
 
-  print("Done. If nothing was displayed,then this means that there was no event recorded for unit",tid,"in run",nrun,".")
+      print('Channel',k,': bline @ ',np.mean((mub[:,k])),'V, std dev=',np.mean((sigb[:,k])),'V')
+      #, rel error=',np.mean((Amax[:,k]))/np.mean((Amax[:,k]))*100,'%')
+      print('Channel',k,': Peak @ ',np.mean((Amax[:,k])),'V, std dev=',np.std((Amax[:,k])),'V')
+      #, rel error=',np.std((Amax[:,k]))/np.mean((Amax[:,k]))*100,'%')
+      #print('Channel',k,': Peak - bline @ ',np.mean((diffAmp)),'V, std dev=',np.std((diffAmp)),'V')
+      #, rel error=',np.std((diffAmp))/np.mean((diffAmp))*100,'%')
+
+  pl.figure(tid*1000+21)
+  pl.subplot(311)
+  pl.plot(Amax[:,0],Amax[:,1],'+')
+  pl.xlabel('Max X (V)')
+  pl.ylabel('Max Y (V)')
+  pl.subplot(312)
+  pl.plot(Amax[:,0],Amax[:,2],'+')
+  pl.xlabel('Max X (V)')
+  pl.ylabel('Max Z (V)')
+  pl.subplot(313)
+  pl.plot(Amax[:,1],Amax[:,2],'+')
+  pl.xlabel('Max Y (V)')
+  pl.ylabel('Max Z (V)')
+
+  #print("Done. If nothing was displayed,then this means that there was no event recorded for unit",tid,"in run",nrun,".")
 
 def load_data(nrun,typ="R"):
   # Loads run data into pyef object

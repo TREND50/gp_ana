@@ -262,7 +262,7 @@ def plot_delays(runid, coincid, exp_delays = None, rec_source = None, rec_dir = 
   chi2pndf = chi2p/ndf
 
   # Display
-  if DISPLAY and len(ants)>3:
+  if DISPLAY and len(ants)>30:
   # and len(ants)>4 and chi2sndf>100:
   # and exp_delays[0]==103:
   # and len(ants)>4 and chi2sndf>100:
