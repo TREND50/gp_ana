@@ -133,7 +133,6 @@ def build_coincs(trigtable,d):
     _, coinc_ind = np.unique(idsearch, return_index = True) # Remove multiple triggers from a same antenna
     if len(coinc_ind)>3:  # Requires 4 antennas at least to perform recons
       # there are events in the causal timewindow
-      coinc_nb = coinc_nb+1  # INcrement coinc counter
       #print(i,"*** Reference unit:",id_ref,times[i],", now looking for coincs within",tmax,"ns")
       #print(np.argwhere(tsearchini<tmax),tsearchini[0:10])
       #print("Units in causal timewindow:",i,i+len(tsearch),idsearch,tsearch,secs[i:i+len(tsearch)],nsecs[i:i+len(tsearch)])
@@ -145,6 +144,10 @@ def build_coincs(trigtable,d):
       coinc_ids = np.array([coinc_ids])  # Anybody able to explain why coinc_id is not a numpy.array???
       coinc_times = tsearch[coinc_ind]
       coinc_times = np.array([coinc_times])
+      if (np.sum([coinc_times == 0])>1) or (coinc_ids[coinc_times == 0] != 5):   # Unit 5 is not the first triggered antenna
+          i = i+len(coinc_ind)
+          continue
+      coinc_nb = coinc_nb+1  # INcrement coinc counter
 
       # Write to file
       # Format: Unix sec; Unit ID, Evt Nb, Coinc Nb, Trig time (ns)
@@ -188,18 +191,32 @@ def build_coincs(trigtable,d):
 
 def fitDelays(filename):
   # Fit trigger delay distribution with gaussian distrib in order to estimate timing resolution
+
+  exp_uids,distmat = build_distmat()
+  exp_delays = distmat[:,-1]/c0*1e9 # ns
+  exp_delays = exp_delays-min(exp_delays[exp_delays>0])
+
   a = np.load(filename)
   delays = a['arr_0']
   uids = a['arr_1']
   uid = np.unique(uids)
-
+  col = ['k','r','b','m','g','c','orange']
   pl.figure(12)
+  j = 0
   for i in uid:
-        h,b,_ = pl.hist(delays[uids==i],1000,label='ID{0}'.format(int(i)))
+        #h,b,p = pl.hist(delays[uids==i],1000,label='ID{0}'.format(int(i)),color=col[j])
+        #col = p[-1].get_facecolor()  # Does not work...
+        h,b,patches = pl.hist(delays[uids==i],1000,label='ID{0}'.format(int(i)))
+        pos = exp_delays[exp_uids == i][0]
+        coco = pl.plot([pos, pos],[0, max(h)*1.1],col[j],linestyle='--',markersize=8)
+        #col = coco[0].get_color() # Does not work either...
+        for p in patches:
+            p.set_facecolor(col[j])
+        j += 1
 
 	# Perform Gaussian fit
         valMax = np.max(h)
-        if valMax>10:
+        if valMax>100:
           posMax = b[np.argmax(h)]
           p0 = [valMax,posMax,20.]
           bc = (b[:-1] + b[1:])/2
@@ -208,7 +225,11 @@ def fitDelays(filename):
           #pl.plot(bc, h, label='ID{0}'.format(int(i)))
           pl.plot(bc, h_fit)
           print('Unit',int(i),': mean trig delay',coeff[1],'ns latter than 1st trigger')
-          print('Trigger time dispersion = ', coeff[2]/np.sqrt(2),'ns')
+          print('Expected value for emitter events is ',pos,'ns.')
+          print('Trigger time dispersion = ', coeff[2]/np.sqrt(2),'ns.')
+        else:
+          print('Unit',int(i),': expected value for emitter events is',pos,'ns.')
+
 
   pl.xlim([0,6000])
   pl.legend(loc='best')
@@ -318,7 +339,7 @@ def get_time(nrun=None,pyf=None):
         print("***Warning! Jump in past for unit",uid,"from SSS =",secs[IDs==uid][i],"to SSS =",secs[IDs==uid][i+1])
 
   # Plot a few graphs to check run quality
-  if 0:
+  if DISPLAY:
       pl.figure(1)
       pl.subplot(211)
       for uid in units:
@@ -348,12 +369,6 @@ def get_time(nrun=None,pyf=None):
       pl.ylabel("Nb of events")
       pl.savefig('NbEvents_R{0}'.format(sys.argv[1]))
 
-      for uid in units:
-        pl.figure(uid*100)
-        delta_trig = np.diff(ttimes[IDs==uid])*1000 # in ms
-        pl.hist(delta_trig[ (delta_trig<200) & (delta_trig>0)],1000)
-        pl.title('Unit {0}'.format(uid))
-        pl.xlabel("$\Delta$t trig (ms)")
 
       dur = max(ttimes)
       print(nevts,"events in run",nrun)
@@ -362,9 +377,15 @@ def get_time(nrun=None,pyf=None):
       for uid in units:
         print("Unit",uid,":",np.shape(np.where(IDs==uid))[1],"events.")
       input()
+      pl.show()
 
-      if DISPLAY:
-        pl.show()
+  for uid in units:
+    pl.figure(uid*100)
+    delta_trig = np.diff(ttimes[IDs==uid])*1000 # in ms
+    pl.hist(delta_trig[ (delta_trig<30) & (delta_trig>0)],60)
+    pl.title('Unit {0}'.format(uid))
+    pl.xlabel("$\Delta$t trig (ms)")
+    pl.savefig('DeltaTrig_R{0}ID{1}'.format(sys.argv[1],uid))
 
   # Format: ID sec nsec (ordered by increasing time)
   return res

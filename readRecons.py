@@ -8,6 +8,7 @@ import sys
 import numpy as np
 import pylab as pl
 from plotAntennas import plotArray
+from tools import getPos
 
 c0 = 299792458
 sigma_t = 15  #ns # Timing error
@@ -38,7 +39,7 @@ def plot_recons(runid):
   th[th>90] = 180-th[th>90]  # Mirror events reconstructed below ground above it
   chi2p = a[:,9]
 
-  goodChi2p = (chi2p<1000)  # Select valid reconstruction only, set at CHi2<1000
+  goodChi2p = (chi2p<10000)  # Select valid reconstruction only, set at CHi2<1000
   print(np.sum(goodChi2p),"valid plane recons out of",len(chi2p))
   th = th[goodChi2p]
   phi = phi[goodChi2p]
@@ -91,7 +92,7 @@ def plot_recons(runid):
   chi2s = a[:,9]
 
   # Select sources with valid recons & close to array only
-  goodChi2s = (chi2s<1000)
+  goodChi2s = (chi2s<10000)
   print(np.sum(goodChi2s),"valid spherical recons out of",len(chi2s))
   close = (np.abs(xs)<1e4) & (np.abs(ys)<1e4)
   xsc = xs[close & goodChi2s]

@@ -35,6 +35,7 @@ def plotArray():
   dead = [status == "no signal"]
   part = [status == "x"]
   bad = [status == "noisy"]
+  cal = [status == "calibrator"]
 
   # Plot
   pl.figure(35)
@@ -43,6 +44,8 @@ def plotArray():
   pl.plot(x[tuple(part)],y[tuple(part)],'ob',label="partial")
   pl.plot(x[tuple(bad)],y[tuple(bad)],'or',label="noisy")
   pl.plot(x[tuple(ok)],y[tuple(ok)],'og',label="ok")
+  pl.plot(x[tuple(cal)],y[tuple(cal)],'hm',label="emitter")
+
   for i in range(len(uid)):
     pl.text(x[i]+10,y[i],uid[i])
 
@@ -51,7 +54,7 @@ def plotArray():
   pl.xlabel("Easting (m)")
   pl.ylabel("Northing (m)")
   pl.legend(loc="best")
-  pl.title('GP35 - May 20, 2019')
+  pl.title('GP35 - May 24, 2019')
   pl.gca().set_aspect('equal')
   pl.show()
 
