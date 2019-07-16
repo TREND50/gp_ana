@@ -54,7 +54,7 @@ def plotArray():
   pl.xlabel("Easting (m)")
   pl.ylabel("Northing (m)")
   pl.legend(loc="best")
-  pl.title('GP35 - May 24, 2019')
+  pl.title('GP35 - June 30, 2019')
   pl.gca().set_aspect('equal')
   pl.show()
 
