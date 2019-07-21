@@ -17,7 +17,7 @@ from scipy.optimize import curve_fit
 from tools import getPos
 from scipy.optimize import curve_fit
 
-DISPLAY = 1  # Switch to 1 for additionnal plots
+DISPLAY = 0  # Switch to 1 for additionnal plots
 ULASTAI = 0
 if ULASTAI:
   datafolder = "/mnt/disk"
@@ -415,7 +415,7 @@ def display_events(nrun=None,pyf=None,typ="R",tid=None):
   nevts = len(pyf.event_list)
   mub,sigb,imax,Amax = [],[],[],[]
   j = 0
-  for evt in f.event_list:
+  for evt in pyf.event_list:
     j = j+1
     if j/1000 == int(j/1000):
       print("Processing event",j,"/",nevts)
@@ -523,48 +523,63 @@ def display_events(nrun=None,pyf=None,typ="R",tid=None):
           print('Channel',k,': Max at zero=',azero,'/',np.shape(imax)[0],'=',float(azero)/np.shape(imax)[0])
           print('Channel',k,': Max < zero=',abline,'/',np.shape(imax)[0],'=',float(abline)/np.shape(imax)[0])
 
-      pl.figure(tid*100+21+k)
-      pl.subplot(231)
-      pl.hist(mub[:,k],offset*2)
-      pl.xlabel('Baseline mean')
-      #pl.title('Board {0}'.format(tid))
-      pl.grid(True)
+      if DISPLAY:
+            pl.figure(tid*100+21+k)
+            pl.subplot(231)
+            pl.hist(mub[:,k],offset*2)
+            pl.xlabel('Baseline mean')
+            #pl.title('Board {0}'.format(tid))
+            pl.grid(True)
 
-      pl.subplot(235)
-      pl.plot(mub[:,k],'+')
-      pl.plot(Amax[:,k],'o')
-      pl.xlabel('Event ID')
-      pl.ylabel('Mean amp (bline & max)')
-      #pl.title('Board {0}'.format(tid))
-      pl.grid(True)
+            pl.subplot(235)
+            pl.plot(mub[:,k],'+')
+            pl.plot(Amax[:,k],'o')
+            pl.xlabel('Event ID')
+            pl.ylabel('Mean amp (bline & max)')
+            #pl.title('Board {0}'.format(tid))
+            pl.grid(True)
 
-      pl.subplot(234)
-      pl.xlabel('Index of signal max')
-      pl.hist(imax[:,k],offset*2)
-      #pl.title('Board {0}'.format(tid))
-      pl.grid(True)
+            pl.subplot(234)
+            pl.xlabel('Index of signal max')
+            pl.hist(imax[:,k],offset*2)
+            #pl.title('Board {0}'.format(tid))
+            pl.grid(True)
 
-      pl.subplot(236)
-      pl.xlabel('Max amplitude')
-      pl.hist(Amax[:,k],offset*2)
-      #pl.title('Board {0}'.format(tid))
-      pl.grid(True)
+            pl.subplot(236)
+            pl.xlabel('Max amplitude')
+            pl.hist(Amax[:,k],offset*2)
+            #pl.title('Board {0}'.format(tid))
+            pl.grid(True)
 
-      pl.subplot(232)
-      diffAmp = Amax[:,k]-mub[:,k]
-      pl.hist(sigb[:,k],offset*2)
-      pl.xlabel('Bline std dev')
-      #pl.title('Board {0}'.format(tid))
-      pl.grid(True)
+            pl.subplot(232)
+            diffAmp = Amax[:,k]-mub[:,k]
+            pl.hist(sigb[:,k],offset*2)
+            pl.xlabel('Bline std dev')
+            #pl.title('Board {0}'.format(tid))
+            pl.grid(True)
 
-      pl.subplot(233)
-      pl.plot(mub[:,k],sigb[:,k],'+')
-      pl.xlabel('Baseline mean')
-      pl.ylabel('Bline std dev')
-      #pl.title('Board {0}'.format(tid))
-      pl.grid(True)
+            pl.subplot(233)
+            pl.plot(mub[:,k],sigb[:,k],'+')
+            pl.xlabel('Baseline mean')
+            pl.ylabel('Bline std dev')
+            #pl.title('Board {0}'.format(tid))
+            pl.grid(True)
+
+            pl.figure(tid*1000+21)
+            pl.subplot(311)
+            pl.plot(Amax[:,0],Amax[:,1],'+')
+            pl.xlabel('Max X (V)')
+            pl.ylabel('Max Y (V)')
+            pl.subplot(312)
+            pl.plot(Amax[:,0],Amax[:,2],'+')
+            pl.xlabel('Max X (V)')
+            pl.ylabel('Max Z (V)')
+            pl.subplot(313)
+            pl.plot(Amax[:,1],Amax[:,2],'+')
+            pl.xlabel('Max Y (V)')
+            pl.ylabel('Max Z (V)')
+
       res = [np.mean((mub[:,k])),np.mean((sigb[:,k]))]
-
       print('Channel',k,': bline @ ',np.mean((mub[:,k])),'V, std dev=',np.mean((sigb[:,k])),'V')
       #, rel error=',np.mean((Amax[:,k]))/np.mean((Amax[:,k]))*100,'%')
       print('Channel',k,': Peak @ ',np.mean((Amax[:,k])),'V, std dev=',np.std((Amax[:,k])),'V')
@@ -572,20 +587,7 @@ def display_events(nrun=None,pyf=None,typ="R",tid=None):
       #print('Channel',k,': Peak - bline @ ',np.mean((diffAmp)),'V, std dev=',np.std((diffAmp)),'V')
       #, rel error=',np.std((diffAmp))/np.mean((diffAmp))*100,'%')
 
-  pl.figure(tid*1000+21)
-  pl.subplot(311)
-  pl.plot(Amax[:,0],Amax[:,1],'+')
-  pl.xlabel('Max X (V)')
-  pl.ylabel('Max Y (V)')
-  pl.subplot(312)
-  pl.plot(Amax[:,0],Amax[:,2],'+')
-  pl.xlabel('Max X (V)')
-  pl.ylabel('Max Z (V)')
-  pl.subplot(313)
-  pl.plot(Amax[:,1],Amax[:,2],'+')
-  pl.xlabel('Max Y (V)')
-  pl.ylabel('Max Z (V)')
-
+  return(np.mean(mub,axis=0).T,np.mean(sigb,axis=0).T,np.mean(Amax,axis=0).T)
   #print("Done. If nothing was displayed,then this means that there was no event recorded for unit",tid,"in run",nrun,".")
 
 def load_data(nrun,typ="R"):
@@ -622,9 +624,9 @@ if __name__ == '__main__':
          print('Calling display_events() for unit',sys.argv[3])
          display_events(pyf = f,typ=sys.argv[2],tid=int(sys.argv[3]))
          sys.exit()
-
-       # Perform coincidence search
-       loadMaxCoarse(sys.argv[1])
-       uid,distmat = build_distmat()
-       trigtable = get_time(pyf=f)  # 2-lines matrix with [0,:]=UnitIDs and [1,:]=trigtimes
-       build_coincs(trigtable,distmat)
+       else:
+         # Perform coincidence search
+         loadMaxCoarse(sys.argv[1])
+         uid,distmat = build_distmat()
+         trigtable = get_time(pyf=f)  # 2-lines matrix with [0,:]=UnitIDs and [1,:]=trigtimes
+         build_coincs(trigtable,distmat)
