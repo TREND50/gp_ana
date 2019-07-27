@@ -17,6 +17,8 @@ from scipy.optimize import curve_fit
 from tools import getPos
 from scipy.optimize import curve_fit
 
+import anaSLC
+
 DISPLAY = 0  # Switch to 1 for additionnal plots
 ULASTAI = 0
 if ULASTAI:
@@ -35,7 +37,6 @@ def twos_comp(val, bits):
         val = val - (1 << bits)        # compute negative value
     return val
 
-
 def loadMaxCoarse(runid):
   # Load max coarse info from SLC file
   global IDsin
@@ -46,9 +47,10 @@ def loadMaxCoarse(runid):
   # First check that file exists
   slcfile = datafolder+"/S"+runid+".yaml"
   if os.path.isfile(slcfile) is False:
-     print('File ',slcfile,'does not exist. Aborting.')
+     print('**** ERROR **** File ',slcfile,'does not exist. Aborting.')
      IDsin = []
-     return
+     sys.exit()
+     #return
 
   # Now read SLC file and dump infos into numpy arrays
   print('Scanning SLC file',slcfile)
@@ -73,7 +75,6 @@ def loadMaxCoarse(runid):
     utcSLC.append(allUTC[ind])
     maxCoarse.append(allMaxCoarse[ind])
 
-
 def getMaxCoarse(uid,utcsec):
   # Retrieve maxCoarse value closests in time to event triggered @ t = utcsec
   i = np.nonzero(IDsin == uid)[0]
@@ -86,7 +87,6 @@ def getMaxCoarse(uid,utcsec):
     return 0
 
   return maxCoarse[i][indt]
-
 
 def build_distmat():
   # Build matrix of d(ant1,ant2)
@@ -101,6 +101,60 @@ def build_distmat():
       d[j,i] = d[i,j]
 
   return uid,d
+
+def compute_trigrate(trigsec,evtid):
+  # Compute trigrate vs time
+  missingid = np.diff(evtid)-1
+  evtid = np.array(evtid)
+  missingnb = np.hstack(([0], missingid.T))
+  # First fetch SLC trig data
+  boardID = sys.argv[3]
+  runID = sys.argv[1]
+  print("Fetching trig rate from SLC data.")
+  utcsec, slctrigrate = anaSLC.loopSLCEvents(boardID,runID)
+
+  # Then compute rate for recorded data
+  deb = min(utcsec)
+  fin = max(utcsec)
+  step = 1  # in seconds
+  time = np.arange(deb,fin,step)
+  rate,missingrate = [],[]
+  for t in time:
+    sel = (trigsec>=t) & (trigsec<t+step)
+    rate.append(np.sum(sel)/step)
+    #print("Slice",t,t+step)
+    #print(evtid[sel],missingnb[sel])
+    #print("Missing event rate = ",np.sum(missingnb[sel]),"/",step,"=",np.sum(missingnb[sel])/step,"Hz")
+    missingrate.append(np.sum(missingnb[sel])/step)
+
+  # Display
+  rate = np.array(rate)
+  missingrate = np.array(missingrate)
+  time = time-min(time)
+  utcsec = utcsec-min(utcsec)
+  pl.figure()
+  pl.subplot(111)
+  pl.plot(utcsec,slctrigrate,label="trig")
+  pl.plot(time,rate,label="rec")
+  pl.plot(time,missingrate,label="miss")
+  pl.plot(time,missingrate+rate,'--',label="miss+rec")
+  pl.xlim([0, max(time)])
+  pl.legend(loc="best")
+  pl.xlabel('Time (s)')
+  pl.ylabel('Trig rate (Hz)')
+
+  # pl.subplot(312)
+  # pl.plot(time,rate)
+  # pl.xlabel('Time (s)')
+  # pl.ylabel('Event rate (Hz)')
+  # pl.xlim([0, max(time)])
+  # pl.subplot(313)
+  # pl.plot(time,missingrate)
+  # pl.xlabel('Time (s)')
+  # pl.ylabel('Missing event rate (Hz)')
+  # pl.xlim([0, max(time)])
+  pl.suptitle("Run {0} Unit {1}".format(sys.argv[1],sys.argv[3]))
+  pl.show()
 
 
 def build_coincs(trigtable,d):
@@ -144,9 +198,9 @@ def build_coincs(trigtable,d):
       coinc_ids = np.array([coinc_ids])  # Anybody able to explain why coinc_id is not a numpy.array???
       coinc_times = tsearch[coinc_ind]
       coinc_times = np.array([coinc_times])
-      if (np.sum([coinc_times == 0])>1) or (coinc_ids[coinc_times == 0] != 5):   # Unit 5 is not the first triggered antenna
-          i = i+len(coinc_ind)
-          continue
+      # if (np.sum([coinc_times == 0])>1) or (coinc_ids[coinc_times == 0] != 5):   # Unit 5 is not the first triggered antenna
+      #     i = i+len(coinc_ind)
+      #     continue
       coinc_nb = coinc_nb+1  # INcrement coinc counter
 
       # Write to file
@@ -187,7 +241,6 @@ def build_coincs(trigtable,d):
 
   if DISPLAY:
     pl.show()
-
 
 def fitDelays(filename):
   # Fit trigger delay distribution with gaussian distrib in order to estimate timing resolution
@@ -240,7 +293,6 @@ def gauss(x, *p):
     A, mu, sigma = p
     return A*np.exp(-(x-mu)**2/(2.*sigma**2))
 
-
 def get_time(nrun=None,pyf=None):
   # Retrieves time info from datafile and order it in increasing order
   print("Now building trigger time table from data...")
@@ -276,9 +328,9 @@ def get_time(nrun=None,pyf=None):
     #  print("Skipping unit 03")
     #  continue
 
-    if uid == 20:  # Dirty trick to exclude one antenna from analysis
+    #if uid == 20:  # Dirty trick to exclude one antenna from analysis
         #  print("Skipping unit 20")
-        continue
+    #    continue
     IDs.append(uid)
     h = evt.header
     sec = h.event_sec
@@ -374,22 +426,26 @@ def get_time(nrun=None,pyf=None):
       print(nevts,"events in run",nrun)
       print("Run duration:",dur,"seconds.")
       print("Units present in run:")
+      tot = 0
       for uid in units:
         print("Unit",uid,":",np.shape(np.where(IDs==uid))[1],"events.")
-      input()
+        tot += np.shape(np.where(IDs==uid))[1]
+      print("Checksum=",tot)
+      input("Waiting for key stroke")
       pl.show()
 
   for uid in units:
     pl.figure(uid*100)
-    delta_trig = np.diff(ttimes[IDs==uid])*1000 # in ms
-    pl.hist(delta_trig[ (delta_trig<30) & (delta_trig>0)],60)
+    delta_trig = np.diff(ttimes[IDs==uid])*1 # in ms
+    sel = (delta_trig<60) & (delta_trig>0)
+    pl.hist(delta_trig[sel],60)
+    #pl.xlim(0,60)
     pl.title('Unit {0}'.format(uid))
     pl.xlabel("$\Delta$t trig (ms)")
     pl.savefig('DeltaTrig_R{0}ID{1}'.format(sys.argv[1],uid))
 
   # Format: ID sec nsec (ordered by increasing time)
   return res
-
 
 def display_events(nrun=None,pyf=None,typ="R",tid=None):
   # Display timetraces for unit tid
@@ -413,12 +469,15 @@ def display_events(nrun=None,pyf=None,typ="R",tid=None):
   if nrun == None:
     nrun = sys.argv[1]
   nevts = len(pyf.event_list)
-  mub,sigb,imax,Amax = [],[],[],[]
+  mub,sigb,imax,Amax,trigsec,evtid = [],[],[],[],[],[]
   j = 0
+  offset = 0
+  prev_evt_nr = 0
   for evt in pyf.event_list:
     j = j+1
     if j/1000 == int(j/1000):
       print("Processing event",j,"/",nevts)
+
 
     # Loop on all events
     for ls in evt.local_station_list:
@@ -426,6 +485,12 @@ def display_events(nrun=None,pyf=None,typ="R",tid=None):
       uid = ls.header.ls_id - 356 # Remove 255 for digits 8-16 in IP adress & 100 for unit ID
       if tid == None or uid == tid:  #  display events for unit tid (or all events from all units if tid == None)
         # Access data
+        trigsec.append(ls.header.gps_seconds)  # For trig rate computation
+        if ls.header.event_nr<prev_evt_nr:
+           print("Evt counter reset!")
+           offset = offset + pow(2,16)
+        prev_evt_nr = ls.header.event_nr
+        evtid.append(ls.header.event_nr+offset)
         raw = ls.adc_buffer
         hraw = [hex(int(a)) for a in raw]  # Transfer back to hexadecimal
         draw = [twos_comp(int(a,16), 12) for a in hraw] #2s complements
@@ -507,6 +572,8 @@ def display_events(nrun=None,pyf=None,typ="R",tid=None):
         sigb.append(isigb)
 
   # Now plot full stat infos
+  compute_trigrate(trigsec,evtid)
+
   imax = np.array(imax)
   Amax = np.array(Amax)
   mub = np.array(mub)
@@ -621,6 +688,9 @@ if __name__ == '__main__':
          sys.exit()
 
        if len(sys.argv)==4:   # BOARDID parameter is present ==> display events
+         # loadMaxCoarse(sys.argv[1])
+         # trigtable = get_time(pyf=f)
+         # plot_rate(trigtable)
          print('Calling display_events() for unit',sys.argv[3])
          display_events(pyf = f,typ=sys.argv[2],tid=int(sys.argv[3]))
          sys.exit()

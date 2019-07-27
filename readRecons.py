@@ -215,6 +215,7 @@ def plot_delays(runid, coincid, exp_delays = None, rec_source = None, rec_dir = 
 
   # Load antenna positions if not in argument
   if ant_pos is None:
+    ant_pos = []
     uid, x, y ,z = getPos()
     for a in ants:
       ind = np.argwhere(uid == a)[0] # Makes me crazy
@@ -263,7 +264,7 @@ def plot_delays(runid, coincid, exp_delays = None, rec_source = None, rec_dir = 
   chi2pndf = chi2p/ndf
 
   # Display
-  if DISPLAY and len(ants)>30:
+  if DISPLAY and len(ants)>0:
   # and len(ants)>4 and chi2sndf>100:
   # and exp_delays[0]==103:
   # and len(ants)>4 and chi2sndf>100:
